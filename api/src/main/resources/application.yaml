@@ -1,3 +1,13 @@
 spring:
   application:
     name: api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/mobifix}
+    username: ${DB_USERNAME:mobifix}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
