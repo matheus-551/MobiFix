@@ -11,7 +11,7 @@ import {
     Apple,
 } from "lucide-react";
 
-export default function LoginPage() {
+export default function Login() {
     const [mostrarSenha, setMostrarSenha] = useState(false);
     const [email, setEmail] = useState("");
     const [senha, setSenha] = useState("");
