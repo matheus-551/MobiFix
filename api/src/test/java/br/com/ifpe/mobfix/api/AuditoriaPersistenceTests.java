@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@SpringBootTest(properties = "firebase.project-id=mobifix-test")
 @Transactional
 @Import(AuditoriaPersistenceTests.AuditorConfig.class)
 class AuditoriaPersistenceTests {
@@ -25,6 +25,7 @@ class AuditoriaPersistenceTests {
     @TestConfiguration
     static class AuditorConfig {
         @Bean
+        @org.springframework.context.annotation.Primary
         AuditorAware<UUID> auditorDeTeste() {
             return () -> Optional.of(AUTOR);
         }

@@ -11,3 +11,6 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
+
+firebase:
+  project-id: ${FIREBASE_PROJECT_ID}
