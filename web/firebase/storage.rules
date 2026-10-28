@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Documentos de prestadores: somente o dono envia/lê; PDF/JPG/PNG de até 5 MB.
+// A equipe de análise acessa pelo Console / Admin SDK (que ignoram estas regras).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /providerDocuments/{uid}/{fileName} {
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/jpeg|image/png');
+      allow read: if request.auth != null && request.auth.uid == uid;
+      // Necessário para desfazer uploads quando o cadastro falha.
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

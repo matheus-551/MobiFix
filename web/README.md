@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MobiFix Web
 
-## Getting Started
+Plataforma que conecta clientes a prestadores de serviços automotivos. Next.js (App Router) + React + TypeScript + Tailwind, com Firebase Authentication, Firestore e Cloud Storage.
 
-First, run the development server:
+> Este projeto usa uma versão do Next.js com mudanças em relação ao que é comum. Consulte `node_modules/next/dist/docs/` (veja `AGENTS.md`) antes de usar APIs novas.
+
+## Requisitos
+
+- Node.js 20+ e npm
+- Um projeto Firebase (plano Spark/gratuito é suficiente)
+
+## Instalação
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # preencha com os valores do seu projeto Firebase
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Configuração do Firebase
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Projeto**: https://console.firebase.google.com → *Adicionar projeto*.
+2. **App web**: *Configurações do projeto → Geral → Seus apps → Web (`</>`)*. Copie o objeto `firebaseConfig` para o `.env.local`:
+   `apiKey`→`NEXT_PUBLIC_FIREBASE_API_KEY`, `authDomain`→`..._AUTH_DOMAIN`, `projectId`→`..._PROJECT_ID`, `storageBucket`→`..._STORAGE_BUCKET`, `messagingSenderId`→`..._MESSAGING_SENDER_ID`, `appId`→`..._APP_ID`.
+3. **Authentication → Método de login**: habilite **E-mail/senha** (não é necessário o "link por e-mail").
+4. **Authentication → Configurações → Domínios autorizados**: confirme `localhost` e adicione o domínio de produção. Sem isso, o envio de e-mails com link de retorno falha (`auth/unauthorized-continue-uri`).
+5. **Authentication → Modelos de e-mail**: personalize o e-mail de *Verificação de endereço de e-mail* e o de *Redefinição de senha* (remetente, idioma pt-BR).
+6. **Firestore Database**: crie o banco (modo produção) e publique as regras de `firebase/firestore.rules`.
+7. **Storage**: ative o Cloud Storage (exige plano Blaze em projetos novos) e publique `firebase/storage.rules`.
+8. Publicar regras: cole o conteúdo no console, ou use `npm i -g firebase-tools && firebase login && firebase use <projectId> && firebase deploy --only firestore:rules,storage`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Verificação de e-mail (adaptação ao Firebase)
 
-## Learn More
+O Firebase Authentication verifica e-mails **por link**, não por código de 6 dígitos. Por isso a tela `/verificar-email` mantém o cartão e o ícone do protótipo, mas no lugar dos seis campos oferece: "Já confirmei meu e-mail", reenvio com intervalo de 60 s e atualização automática ao voltar para a aba. Um OTP real exigiria backend e provedor de e-mail próprios.
 
-To learn more about Next.js, take a look at the following resources:
+Dois modos de link são suportados:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Padrão do Firebase**: o link abre a página hospedada pelo Firebase; depois o usuário volta ao site e clica em "Já confirmei".
+- **Página própria (recomendado)**: em *Modelos de e-mail → Verificação → editar URL de ação*, use `https://SEU-DOMINIO/verificar-email`. O link chega com `mode=verifyEmail&oobCode=...` e a página conclui a verificação, tratando links inválidos ou expirados.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Modelo de dados (Firestore)
 
-## Deploy on Vercel
+| Coleção | Documento | Conteúdo |
+|---|---|---|
+| `users` | `{uid}` | e-mail, `role` (`client`/`provider`/`admin`), `status`, datas (USER, sem hash de senha) |
+| `clientProfiles` | `{uid}` | nome, sobrenome, telefone, estado (CLIENT_PROFILE) |
+| `providerProfiles` | `{uid}` | dados da oficina, CPF/CNPJ, especialidades e tipos de veículo (arrays de IDs), documentos, `approvalStatus` |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Decisões: o UID do Authentication é a chave de identidade; senhas ficam só no Authentication. As relações N:N `PROVIDER_SPECIALTY` e `PROVIDER_VEHICLE_TYPE` viraram arrays no perfil. `SPECIALTY` e `VEHICLE_TYPE` são catálogos em `src/shared/constants/catalog.ts`. `VEHICLE`, `AVAILABILITY_SLOT`, `APPOINTMENT` e `REVIEW` estão tipados em `src/shared/types/domain.ts`, mas ainda sem telas, serviços ou regras.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Estados do prestador: cadastro (conta criada) → e-mail verificado (Authentication) → análise documental → aprovação (`approvalStatus: approved`). O cadastro cria `status: pending` / `under_review`; **aprovar é manual** e exige alterar o documento no Console (ou Admin SDK). Para criar um administrador, defina manualmente `users/{uid}.role = "admin"` no Console.
+
+## Segurança
+
+- A autorização efetiva está nas **regras** (`firebase/*.rules`): o usuário não consegue definir papel diferente de cliente/prestador, nem alterar papel, status ou aprovação, nem ler dados de outros.
+- Os guardas de rota (`RequireAuth`, `GuestOnly`) são só experiência de navegação; não substituem as regras.
+- Limitação atual: não há sessão no servidor (cookie + Firebase Admin SDK), então as páginas privadas são protegidas no cliente; os dados continuam protegidos pelas regras. Aprovação automatizada de prestadores exigiria uma API com Admin SDK.
+
+## Comandos
+
+```bash
+npm run dev        # desenvolvimento
+npm run lint       # ESLint
+npm run typecheck  # tsc --noEmit
+npm run build      # build de produção
+```
+
+## Estrutura
+
+```
+src/app/                 rotas (uma pasta por URL) e layout
+src/features/auth/       login, cadastro de cliente, recuperação, verificação, contexto e guardas
+src/features/cliente/    painel do cliente
+src/features/prestador/  cadastro em 5 etapas, validação, serviço de registro, painel
+src/features/home/       landing page
+src/shared/              componentes, tipos, validadores, utilitários, catálogos
+src/shared/lib/firebase/ configuração validada e inicialização única (preguiçosa)
+src/routes/              constantes de rotas
+firebase/                regras do Firestore e do Storage
+```
+
+## Rotas
+
+`/` · `/login` · `/cadastro` · `/cadastro/prestador` · `/verificar-email` · `/recuperar-senha` · `/cliente` (cliente) · `/prestador` (prestador) · `/termos` · `/privacidade`
+
+A rota dinâmica genérica `/[pagina]` foi removida; `/login` continua igual.
+
+## Pendências
+
+- Textos jurídicos reais de `/termos` e `/privacidade`.
+- Telas de busca, perfil do prestador, agendamentos, veículos e avaliações (botões da landing page "Buscar" e "Ver perfil e agendar" ainda não têm destino).
+- Login social (Google/Apple) foi removido por não estar implementado.
+- Painel administrativo e aprovação de prestadores.

@@ -126,12 +126,12 @@ export default function Home() {
               Login
             </Link>
 
-            <button
-              type="button"
+            <Link
+              href={routes.signup}
               className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600"
             >
               Cadastre-se
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -431,7 +431,7 @@ export default function Home() {
           <div>
             <h3 className="mb-4 text-sm font-bold text-white">Para prestadores</h3>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li><a href="#contato" className="hover:text-orange-500">Cadastre sua oficina</a></li>
+              <li><Link href={routes.providerSignup} className="hover:text-orange-500">Cadastre sua oficina</Link></li>
               <li><a href="#contato" className="hover:text-orange-500">Planos</a></li>
               <li><a href="#contato" className="hover:text-orange-500">Suporte</a></li>
             </ul>
@@ -440,8 +440,8 @@ export default function Home() {
           <div>
             <h3 className="mb-4 text-sm font-bold text-white">Segurança e ajuda</h3>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li><a href="#contato" className="hover:text-orange-500">Política de privacidade</a></li>
-              <li><a href="#contato" className="hover:text-orange-500">Termos de uso</a></li>
+              <li><Link href={routes.privacy} className="hover:text-orange-500">Política de privacidade</Link></li>
+              <li><Link href={routes.terms} className="hover:text-orange-500">Termos de uso</Link></li>
               <li><a href="#contato" className="hover:text-orange-500">Fale conosco</a></li>
             </ul>
           </div>

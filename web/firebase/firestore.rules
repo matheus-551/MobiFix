@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// Coleções: users/{uid}, clientProfiles/{uid}, providerProfiles/{uid}.
+// Papel (role), status e aprovação NUNCA podem ser alterados pelo próprio usuário.
+// O papel "admin" só pode ser atribuído manualmente no console / Admin SDK.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Papel do usuário depois que a escrita (batch) for aplicada.
+    function roleAfter(uid) {
+      return getAfter(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    function onlyChanges(allowedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // Autocadastro: somente cliente (ativo) ou prestador (pendente de análise).
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['email', 'role', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.email is string
+        && request.resource.data.email.lower() == request.auth.token.email.lower()
+        && request.resource.data.role in ['client', 'provider']
+        && request.resource.data.status == (request.resource.data.role == 'client' ? 'active' : 'pending')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Mudanças de papel/status exigem operação privilegiada (console ou Admin SDK).
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /clientProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isOwner(uid)
+        && roleAfter(uid) == 'client'
+        && request.resource.data.keys().hasOnly(['firstName', 'lastName', 'phone', 'state', 'createdAt', 'updatedAt'])
+        && request.resource.data.firstName is string && request.resource.data.firstName.size() in range(1, 61)
+        && request.resource.data.lastName is string && request.resource.data.lastName.size() in range(1, 61)
+        && request.resource.data.phone is string && request.resource.data.phone.size() in range(10, 20)
+        && request.resource.data.state is string && request.resource.data.state.size() == 2
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isOwner(uid)
+        && onlyChanges(['firstName', 'lastName', 'phone', 'state', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /providerProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isOwner(uid)
+        && roleAfter(uid) == 'provider'
+        && request.resource.data.keys().hasOnly([
+          'responsibleName', 'displayName', 'phone', 'taxIdType', 'taxId', 'address', 'city', 'state',
+          'vehicleTypeIds', 'specialtyIds', 'documents', 'approvalStatus', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.approvalStatus == 'under_review'
+        && request.resource.data.responsibleName is string && request.resource.data.responsibleName.size() in range(2, 61)
+        && request.resource.data.displayName is string && request.resource.data.displayName.size() in range(2, 61)
+        && request.resource.data.phone is string && request.resource.data.phone.size() in range(10, 20)
+        && request.resource.data.taxIdType in ['cpf', 'cnpj']
+        && request.resource.data.taxId is string && request.resource.data.taxId.size() in [11, 14]
+        && request.resource.data.address is string && request.resource.data.address.size() in range(5, 200)
+        && request.resource.data.city is string && request.resource.data.city.size() > 0
+        && request.resource.data.state is string && request.resource.data.state.size() == 2
+        && request.resource.data.vehicleTypeIds is list && request.resource.data.vehicleTypeIds.size() in range(1, 11)
+        && request.resource.data.specialtyIds is list && request.resource.data.specialtyIds.size() in range(1, 21)
+        && request.resource.data.documents is list && request.resource.data.documents.size() in range(1, 3)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // O prestador edita só dados de contato/atuação; documentos, CPF/CNPJ e aprovação são administrativos.
+      allow update: if isOwner(uid)
+        && onlyChanges(['displayName', 'phone', 'address', 'city', 'state', 'vehicleTypeIds', 'specialtyIds', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin();
+
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

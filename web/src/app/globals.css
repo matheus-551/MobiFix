@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/*
+ * As telas seguem o protótipo (tema claro). O modo escuro automático foi removido porque
+ * escurecia o fundo da página e deixava o texto claro sobre os cartões brancos.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -8,15 +12,6 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

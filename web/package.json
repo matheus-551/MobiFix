@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "firebase": "^12.0.0",
     "lucide-react": "^1.57.0",
     "next": "16.4.0",
     "react": "19.3.0",
