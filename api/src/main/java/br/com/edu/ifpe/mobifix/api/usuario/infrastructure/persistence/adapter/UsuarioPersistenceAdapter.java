@@ -5,6 +5,9 @@ import br.com.edu.ifpe.mobifix.api.usuario.domain.port.UsuarioRepository;
 import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.persistence.entity.UsuarioEntity;
 import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.persistence.repository.UsuarioJpaRepository;
 
+import br.com.edu.ifpe.mobifix.api.usuario.application.exception.UsuarioInativoException;
+import br.com.edu.ifpe.mobifix.api.usuario.application.exception.UsuarioNaoEncontradoException;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -52,6 +55,28 @@ public class UsuarioPersistenceAdapter implements UsuarioRepository {
         return repository.findByFirebaseId(firebaseId).map(this::toDomain);
     }
 
+    @Override
+    @Transactional
+    public Usuario atualizarDadosPessoais(Usuario usuario) {
+        UsuarioEntity existente = repository.buscarParaAlteracao(usuario.firebaseId())
+                .filter(entity -> entity.getId().equals(usuario.id()))
+                .orElseThrow(UsuarioNaoEncontradoException::new);
+        // Revalida sob bloqueio para uma edicao concorrente nao reativar a conta.
+        if (!existente.isAtivo()) throw new UsuarioInativoException();
+        existente.atualizarDadosPessoais(usuario.nome(), usuario.sobrenome(), usuario.telefone(), usuario.uf());
+        repository.flush();
+        return toDomain(existente);
+    }
+
+    @Override
+    @Transactional
+    public void desativarPorFirebaseId(String firebaseId) {
+        UsuarioEntity existente = repository.buscarParaAlteracao(firebaseId)
+                .orElseThrow(UsuarioNaoEncontradoException::new);
+        // Repetir a desativacao mantem o mesmo estado, sem excluir vinculos.
+        existente.desativar();
+        repository.flush();
+    }
     private Usuario toDomain(UsuarioEntity entity) {
         return new Usuario(
                 entity.getId(),

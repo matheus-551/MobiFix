@@ -1,6 +1,10 @@
 package br.com.edu.ifpe.mobifix.api.usuario.infrastructure.web;
 
 import java.util.UUID;
+import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.atualizarUsuarioAtual.AtualizarUsuarioAtual;
+import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.atualizarUsuarioAtual.AtualizarUsuarioCommand;
+import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.desativarUsuarioAtual.DesativarUsuarioAtual;
+import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.web.dto.AtualizarUsuarioRequest;
 
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.consultarUsuarioAtual.ConsultarUsuarioAtual;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.criarUsuario.CriarUsuario;
@@ -23,9 +27,13 @@ public class UsuarioController {
     private final CriarUsuario criarUsuario;
     private final ConsultarUsuarioAtual consultarUsuarioAtual;
     private final UUID firebaseIdMock;
+    private final AtualizarUsuarioAtual atualizarUsuarioAtual;
+    private final DesativarUsuarioAtual desativarUsuarioAtual;
 
-    public UsuarioController(CriarUsuario criarUsuario, ConsultarUsuarioAtual consultarUsuarioAtual, @Value("${app.mock.firebase-id}") UUID firebaseIdMock) {
+    public UsuarioController(CriarUsuario criarUsuario, ConsultarUsuarioAtual consultarUsuarioAtual, AtualizarUsuarioAtual atualizarUsuarioAtual, DesativarUsuarioAtual desativarUsuarioAtual, @Value("${app.mock.firebase-id}") UUID firebaseIdMock) {
         this.criarUsuario = criarUsuario;
+        this.atualizarUsuarioAtual = atualizarUsuarioAtual;
+        this.desativarUsuarioAtual = desativarUsuarioAtual;
         this.consultarUsuarioAtual = consultarUsuarioAtual;
         this.firebaseIdMock = firebaseIdMock;
     }
@@ -56,6 +64,19 @@ public class UsuarioController {
         return toResponse(usuario);
     }
 
+    @PutMapping("/me")
+    public UsuarioResponse atualizarAtual(@Valid @RequestBody AtualizarUsuarioRequest request) {
+        Usuario usuario = atualizarUsuarioAtual.executar(firebaseIdMock.toString(), new AtualizarUsuarioCommand(
+                request.nome(), request.sobrenome(), request.telefone(), request.uf()
+        ));
+        return toResponse(usuario);
+    }
+
+    @DeleteMapping("/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void desativarAtual() {
+        desativarUsuarioAtual.executar(firebaseIdMock.toString());
+    }
     private UsuarioResponse toResponse(Usuario usuario) {
         return new UsuarioResponse(
                 usuario.id(),

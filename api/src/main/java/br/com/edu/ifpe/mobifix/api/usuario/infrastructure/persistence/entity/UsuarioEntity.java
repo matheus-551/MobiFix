@@ -50,6 +50,16 @@ public class UsuarioEntity {
     @Column(nullable = false)
     private boolean ativo;
 
+    public void atualizarDadosPessoais(String nome, String sobrenome, String telefone, String uf) {
+        this.nome = nome;
+        this.sobrenome = sobrenome;
+        this.telefone = telefone;
+        this.uf = uf;
+    }
+
+    public void desativar() {
+        this.ativo = false;
+    }
     @Builder
     public UsuarioEntity(UUID id, String firebaseId, String nome, String sobrenome, String email, String telefone,
                          String uf, TipoUsuario tipo, boolean ativo) {
