@@ -1,6 +1,7 @@
 package br.com.edu.ifpe.mobifix.api.usuario.infrastructure.web;
 
 import java.sql.SQLException;
+import br.com.edu.ifpe.mobifix.api.usuario.application.exception.UsuarioInativoException;
 import java.util.List;
 
 import br.com.edu.ifpe.mobifix.api.usuario.application.exception.UsuarioJaCadastradoException;
@@ -15,6 +16,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(assignableTypes = UsuarioController.class)
 public class UsuarioExceptionHandler {
+    @ExceptionHandler(UsuarioInativoException.class)
+    public ProblemDetail tratarUsuarioInativo(UsuarioInativoException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(422), exception.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail tratarArgumentoInvalido(IllegalArgumentException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
 
     @ExceptionHandler(UsuarioJaCadastradoException.class)
     public ProblemDetail tratarDuplicidade(UsuarioJaCadastradoException exception) {

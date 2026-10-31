@@ -12,5 +12,9 @@ public interface UsuarioRepository {
 
     Usuario salvar(Usuario usuario);
 
+    Usuario atualizarDadosPessoais(Usuario usuario);
+
+    void desativarPorFirebaseId(String firebaseId);
+
     Optional<Usuario> buscarPorFirebaseId(String firebaseId);
 }
