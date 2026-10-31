@@ -1,6 +1,8 @@
 package br.com.edu.ifpe.mobifix.api.prestador.infrastructure.persistence.adapter;
 
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
+import br.com.edu.ifpe.mobifix.api.prestador.application.event.PerfilPrestadorCriado;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -27,9 +29,11 @@ public class PerfilPrestadorPersistenceAdapter implements PerfilPrestadorReposit
 
     private final PerfilPrestadorJpaRepository repository;
     private final EntityManager entityManager;
+    private final ApplicationEventPublisher eventos;
 
-    public PerfilPrestadorPersistenceAdapter(PerfilPrestadorJpaRepository repository, EntityManager entityManager) {
+    public PerfilPrestadorPersistenceAdapter(PerfilPrestadorJpaRepository repository, EntityManager entityManager, ApplicationEventPublisher eventos) {
         this.repository = repository;
+        this.eventos = eventos;
         this.entityManager = entityManager;
     }
 
@@ -45,6 +49,7 @@ public class PerfilPrestadorPersistenceAdapter implements PerfilPrestadorReposit
         PerfilPrestadorEntity entity = toEntity(perfil);
 
         PerfilPrestadorEntity salvo = repository.saveAndFlush(entity);
+        eventos.publishEvent(new PerfilPrestadorCriado(salvo.getId()));
 
         return toDomain(salvo);
     }
