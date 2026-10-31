@@ -1,6 +1,8 @@
 package br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.persistence.adapter;
 
 import java.util.List;
+import java.util.Optional;
+import br.com.edu.ifpe.mobifix.api.veiculo.application.exception.VeiculoNaoEncontradoException;
 import java.util.UUID;
 import br.com.edu.ifpe.mobifix.api.catalogo.infrastructure.persistence.entity.TipoVeiculoEntity;
 import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.persistence.entity.UsuarioEntity;
@@ -32,7 +34,34 @@ public class VeiculoPersistenceAdapter implements VeiculoRepository {
     @Override
     @Transactional(readOnly = true)
     public List<Veiculo> listarPorClienteId(UUID clienteId) {
-        return repository.findAllByCliente_IdOrderByMarcaAscModeloAsc(clienteId).stream().map(this::toDomain).toList();
+        return repository.findAllByCliente_IdAndAtivoTrueOrderByMarcaAscModeloAsc(clienteId).stream().map(this::toDomain).toList();
+    }
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Veiculo> buscarAtivoPorIdEClienteId(UUID id, UUID clienteId) {
+        return repository.findByIdAndCliente_IdAndAtivoTrue(id, clienteId).map(this::toDomain);
+    }
+
+    @Override
+    @Transactional
+    public Veiculo atualizar(Veiculo veiculo) {
+        VeiculoEntity existente = repository.buscarAtivoParaAlteracao(veiculo.id(), veiculo.clienteId())
+                .orElseThrow(VeiculoNaoEncontradoException::new);
+        existente.atualizarDados(
+                entityManager.getReference(TipoVeiculoEntity.class, veiculo.tipoVeiculoId()),
+                veiculo.marca(), veiculo.modelo(), veiculo.ano(), veiculo.placa()
+        );
+        repository.flush();
+        return toDomain(existente);
+    }
+
+    @Override
+    @Transactional
+    public void desativar(UUID id, UUID clienteId) {
+        VeiculoEntity existente = repository.buscarAtivoParaAlteracao(id, clienteId)
+                .orElseThrow(VeiculoNaoEncontradoException::new);
+        existente.desativar();
+        repository.flush();
     }
     private Veiculo toDomain(VeiculoEntity entity) {
         return new Veiculo(entity.getId(), entity.getCliente().getId(), entity.getTipoVeiculo().getId(),

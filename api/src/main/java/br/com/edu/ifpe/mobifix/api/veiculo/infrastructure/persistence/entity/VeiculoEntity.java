@@ -29,6 +29,21 @@ public class VeiculoEntity {
     private int ano;
     @Column(length = 7)
     private String placa;
+    // DEFAULT true preserva os registros anteriores ao adicionar a coluna pelo Hibernate.
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean ativo = true;
+
+    public void atualizarDados(TipoVeiculoEntity tipoVeiculo, String marca, String modelo, int ano, String placa) {
+        this.tipoVeiculo = tipoVeiculo;
+        this.marca = marca;
+        this.modelo = modelo;
+        this.ano = ano;
+        this.placa = placa;
+    }
+
+    public void desativar() {
+        this.ativo = false;
+    }
 
     public VeiculoEntity(UUID id, UsuarioEntity cliente, TipoVeiculoEntity tipoVeiculo, String marca, String modelo, int ano, String placa) {
         this.id = id;

@@ -1,6 +1,7 @@
 package br.com.edu.ifpe.mobifix.api.veiculo.application;
 
 import java.util.List;
+import br.com.edu.ifpe.mobifix.api.veiculo.application.exception.VeiculoNaoEncontradoException;
 import java.util.Set;
 import java.util.UUID;
 import br.com.edu.ifpe.mobifix.api.catalogo.domain.port.TipoVeiculoRepository;
@@ -37,6 +38,26 @@ public class VeiculosDoCliente {
         return veiculos.listarPorClienteId(consultarCliente(firebaseId).id());
     }
 
+    public Veiculo consultar(String firebaseId, UUID id) {
+        Usuario cliente = consultarCliente(firebaseId);
+        return veiculos.buscarAtivoPorIdEClienteId(id, cliente.id())
+                .orElseThrow(VeiculoNaoEncontradoException::new);
+    }
+
+    public Veiculo atualizar(String firebaseId, UUID id, AtualizarVeiculoCommand command) {
+        Veiculo atual = consultar(firebaseId, id);
+        Veiculo atualizado = new Veiculo(atual.id(), atual.clienteId(), command.tipoVeiculoId(),
+                command.marca(), command.modelo(), command.ano(), command.placa());
+        if (!tipos.existemTodosPorIds(Set.of(atualizado.tipoVeiculoId()))) {
+            throw new OperacaoVeiculoInvalidaException("O tipo de veículo informado não existe.");
+        }
+        return veiculos.atualizar(atualizado);
+    }
+
+    public void desativar(String firebaseId, UUID id) {
+        Usuario cliente = consultarCliente(firebaseId);
+        veiculos.desativar(id, cliente.id());
+    }
     private Usuario consultarCliente(String firebaseId) {
         Usuario usuario = usuarios.buscarPorFirebaseId(firebaseId).orElseThrow(UsuarioNaoEncontradoException::new);
         if (!usuario.ativo() || usuario.tipo() != TipoUsuario.CLIENTE) {
