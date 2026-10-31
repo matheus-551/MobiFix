@@ -1,6 +1,8 @@
 package br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web;
 
 import java.util.List;
+import br.com.edu.ifpe.mobifix.api.veiculo.application.AtualizarVeiculoCommand;
+import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web.dto.AtualizarVeiculoRequest;
 import java.util.UUID;
 import br.com.edu.ifpe.mobifix.api.veiculo.application.CriarVeiculoCommand;
 import br.com.edu.ifpe.mobifix.api.veiculo.application.VeiculosDoCliente;
@@ -30,6 +32,22 @@ public class VeiculoController {
     @GetMapping("/me")
     public List<VeiculoResponse> listarMeus() {
         return veiculos.listar(firebaseIdMock.toString()).stream().map(this::toResponse).toList();
+    }
+    @GetMapping("/{id}")
+    public VeiculoResponse consultar(@PathVariable UUID id) {
+        return toResponse(veiculos.consultar(firebaseIdMock.toString(), id));
+    }
+
+    @PutMapping("/{id}")
+    public VeiculoResponse atualizar(@PathVariable UUID id, @Valid @RequestBody AtualizarVeiculoRequest request) {
+        return toResponse(veiculos.atualizar(firebaseIdMock.toString(), id, new AtualizarVeiculoCommand(
+                request.tipoVeiculoId(), request.marca(), request.modelo(), request.ano(), request.placa())));
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void desativar(@PathVariable UUID id) {
+        veiculos.desativar(firebaseIdMock.toString(), id);
     }
     private VeiculoResponse toResponse(Veiculo veiculo) {
         return new VeiculoResponse(veiculo.id(), veiculo.clienteId(), veiculo.tipoVeiculoId(),

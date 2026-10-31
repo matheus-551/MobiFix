@@ -1,6 +1,7 @@
 package br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web;
 
 import java.sql.SQLException;
+import br.com.edu.ifpe.mobifix.api.veiculo.application.exception.VeiculoNaoEncontradoException;
 import br.com.edu.ifpe.mobifix.api.usuario.application.exception.UsuarioNaoEncontradoException;
 import br.com.edu.ifpe.mobifix.api.veiculo.application.exception.OperacaoVeiculoInvalidaException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -11,6 +12,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(assignableTypes = VeiculoController.class)
 public class VeiculoExceptionHandler {
+    @ExceptionHandler(VeiculoNaoEncontradoException.class)
+    public ProblemDetail veiculoNaoEncontrado(VeiculoNaoEncontradoException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+    }
     @ExceptionHandler(UsuarioNaoEncontradoException.class)
     public ProblemDetail usuarioNaoEncontrado(UsuarioNaoEncontradoException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
