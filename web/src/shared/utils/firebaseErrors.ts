@@ -11,7 +11,6 @@ const MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "Já existe uma conta com este e-mail. Tente entrar ou recuperar a senha.",
   "auth/weak-password": "A senha é muito fraca. Use pelo menos 8 caracteres, com letras e números.",
   "auth/network-request-failed": "Falha de conexão. Verifique sua internet e tente novamente.",
-  "auth/expired-action-code": "Este link expirou. Solicite um novo e-mail de verificação.",
   "auth/invalid-action-code": "Este link é inválido ou já foi utilizado. Solicite um novo e-mail.",
   "auth/requires-recent-login": "Por segurança, entre novamente para continuar.",
   "auth/operation-not-allowed": "O login por e-mail e senha não está habilitado no Firebase.",
