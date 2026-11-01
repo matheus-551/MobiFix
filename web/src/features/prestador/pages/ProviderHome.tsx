@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, Clock } from "lucide-react";
 import { Alert } from "@/shared/components/Alert";
-import { DashboardShell } from "@/shared/components/DashboardShell";
-import { getErrorMessage } from "@/shared/utils/firebaseErrors";
-import type { ProviderApprovalStatus, ProviderProfile } from "@/shared/types/domain";
-import { RequireAuth } from "@/features/auth/components/RouteGuards";
-import { useAuth } from "@/features/auth/hooks/useAuth";
-import { getProviderProfile } from "@/features/auth/services/accountService";
+import { EmptyState, LoadingBlock } from "@/features/cliente/components/StateViews";
+import type { ProviderApprovalStatus } from "@/shared/types/domain";
+import { useProvider } from "../context/ProviderContext";
+import { FeatureUnavailable, PageTitle, StatCard } from "../components/ProviderUi";
 
 const APPROVAL_TEXT: Record<ProviderApprovalStatus, { title: string; detail: string }> = {
   under_review: {
@@ -29,25 +26,8 @@ const APPROVAL_TEXT: Record<ProviderApprovalStatus, { title: string; detail: str
   },
 };
 
-function ProviderDashboard() {
-  const { user, account } = useAuth();
-  const [profile, setProfile] = useState<ProviderProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const uid = user?.uid;
-
-  useEffect(() => {
-    if (!uid) return;
-    let cancelled = false;
-    getProviderProfile(uid)
-      .then((data) => !cancelled && setProfile(data))
-      .catch((failure: unknown) => !cancelled && setError(getErrorMessage(failure)))
-      .finally(() => !cancelled && setLoaded(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
-
+export default function ProviderHome() {
+  const { profile, loaded, error, email, displayName } = useProvider();
   const approval = profile ? APPROVAL_TEXT[profile.approvalStatus] : null;
   const approved = profile?.approvalStatus === "approved";
 
@@ -59,11 +39,14 @@ function ProviderDashboard() {
   ];
 
   return (
-    <DashboardShell greeting={profile ? `Olá, ${profile.responsibleName.split(" ")[0]}!` : "Olá!"}>
+    <>
+      <PageTitle title="Painel de Controle — Prestador" />
+
       <section className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900">Painel do prestador</h1>
+        <h2 className="text-lg font-bold text-gray-900">{displayName ? `Olá, ${displayName}!` : "Olá!"}</h2>
+        <p className="mt-1 text-sm text-gray-500">Acompanhe o desempenho e o andamento da sua oficina.</p>
         {error && <div className="mt-4"><Alert tone="error">{error}</Alert></div>}
-        {!error && !loaded && <p role="status" className="mt-2 text-sm text-gray-500">Carregando...</p>}
+        {!error && !loaded && <LoadingBlock />}
         {approval && (
           <div className="mt-4">
             <Alert tone={approved ? "success" : profile?.approvalStatus === "under_review" ? "info" : "error"}>
@@ -75,6 +58,26 @@ function ProviderDashboard() {
           <div className="mt-4"><Alert tone="error">Perfil profissional não encontrado. Contate o suporte.</Alert></div>
         )}
       </section>
+
+      <FeatureUnavailable feature="agendamentos e avaliações" />
+
+      <section aria-label="Indicadores" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Solicitações Pendentes" />
+        <StatCard label="Agendamentos de Hoje" />
+        <StatCard label="Concluídos este Mês" />
+        <StatCard label="Avaliação Média" />
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl bg-white p-6 shadow-sm" aria-labelledby="proximos">
+          <h2 id="proximos" className="mb-4 text-sm font-bold text-gray-900">Próximos Atendimentos</h2>
+          <EmptyState title="Sem dados para exibir">Os próximos atendimentos aparecerão aqui.</EmptyState>
+        </section>
+        <section className="rounded-2xl bg-white p-6 shadow-sm" aria-labelledby="desempenho">
+          <h2 id="desempenho" className="mb-4 text-sm font-bold text-gray-900">Desempenho Semanal (Serviços Concluídos)</h2>
+          <EmptyState title="Sem dados para exibir">O gráfico semanal aparecerá aqui.</EmptyState>
+        </section>
+      </div>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm" aria-labelledby="andamento">
         <h2 id="andamento" className="mb-4 text-sm font-bold text-orange-500">Andamento do cadastro</h2>
@@ -105,7 +108,7 @@ function ProviderDashboard() {
           <h2 id="dados-empresa" className="mb-4 text-sm font-bold text-orange-500">Dados da oficina</h2>
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <Item label="Empresa / Oficina" value={profile.displayName} />
-            <Item label="E-mail" value={account?.email ?? user?.email ?? "—"} />
+            <Item label="E-mail" value={email ?? "—"} />
             <Item label="Telefone" value={profile.phone} />
             <Item label="Localização" value={`${profile.city} - ${profile.state}`} />
             <Item label="Endereço" value={profile.address} />
@@ -113,7 +116,7 @@ function ProviderDashboard() {
           </dl>
         </section>
       )}
-    </DashboardShell>
+    </>
   );
 }
 
@@ -123,13 +126,5 @@ function Item({ label, value }: { label: string; value: string }) {
       <dt className="text-xs font-semibold text-gray-500">{label}</dt>
       <dd className="mt-0.5 break-words text-gray-800">{value}</dd>
     </div>
-  );
-}
-
-export default function ProviderHome() {
-  return (
-    <RequireAuth role="provider">
-      <ProviderDashboard />
-    </RequireAuth>
   );
 }
