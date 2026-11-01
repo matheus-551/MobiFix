@@ -31,8 +31,8 @@ class UsuarioControllerTest {
             """;
     @BeforeEach
     void configurar() {
-        mvc = MockMvcBuilders.standaloneSetup(new UsuarioController(criar, consultar, atualizar, desativar, identidade))
-                .setControllerAdvice(new UsuarioExceptionHandler()).build();
+        mvc = MockMvcBuilders.standaloneSetup(new UsuarioController(criar, consultar, atualizar, desativar, identidade, null))
+                .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/").accept(org.springframework.http.MediaType.APPLICATION_JSON)).setControllerAdvice(new UsuarioExceptionHandler()).build();
     }
     @Test
     void putRetornaDadosAtualizadosPreservandoCamposRestritos() throws Exception {

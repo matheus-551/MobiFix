@@ -1,5 +1,9 @@
 package br.com.edu.ifpe.mobifix.api.usuario.infrastructure.web;
 
+import br.com.edu.ifpe.mobifix.api.shared.infrastructure.web.hal.ApiHalAssembler;
+import io.swagger.v3.oas.annotations.Hidden;
+import org.springframework.hateoas.EntityModel;
+
 import java.util.UUID;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.atualizarUsuarioAtual.AtualizarUsuarioAtual;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.atualizarUsuarioAtual.AtualizarUsuarioCommand;
@@ -21,8 +25,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/usuarios")
+@RequestMapping(value = "/api/v1/usuarios", produces = "application/json")
 public class UsuarioController {
+    private final ApiHalAssembler hal;
 
     private final CriarUsuario criarUsuario;
     private final ConsultarUsuarioAtual consultarUsuarioAtual;
@@ -30,7 +35,8 @@ public class UsuarioController {
     private final AtualizarUsuarioAtual atualizarUsuarioAtual;
     private final DesativarUsuarioAtual desativarUsuarioAtual;
 
-    public UsuarioController(CriarUsuario criarUsuario, ConsultarUsuarioAtual consultarUsuarioAtual, AtualizarUsuarioAtual atualizarUsuarioAtual, DesativarUsuarioAtual desativarUsuarioAtual, @Value("${app.mock.firebase-id}") UUID firebaseIdMock) {
+    public UsuarioController(CriarUsuario criarUsuario, ConsultarUsuarioAtual consultarUsuarioAtual, AtualizarUsuarioAtual atualizarUsuarioAtual, DesativarUsuarioAtual desativarUsuarioAtual, @Value("${app.mock.firebase-id}") UUID firebaseIdMock, ApiHalAssembler hal) {
+        this.hal = hal;
         this.criarUsuario = criarUsuario;
         this.atualizarUsuarioAtual = atualizarUsuarioAtual;
         this.desativarUsuarioAtual = desativarUsuarioAtual;
@@ -72,7 +78,7 @@ public class UsuarioController {
         return toResponse(usuario);
     }
 
-    @DeleteMapping("/me")
+    @DeleteMapping(value = "/me", produces = {"application/json", "application/hal+json"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void desativarAtual() {
         desativarUsuarioAtual.executar(firebaseIdMock.toString());
@@ -89,4 +95,17 @@ public class UsuarioController {
                 usuario.ativo()
         );
     }
+
+    @Hidden
+    @PostMapping(produces = "application/hal+json")
+    public ResponseEntity<EntityModel<Object>> criarHal(@Valid @RequestBody CriarUsuarioRequest request) {
+        var resposta = criar(request);
+        return ResponseEntity.status(resposta.getStatusCode()).headers(resposta.getHeaders()).body(hal.recurso(resposta.getBody()));
+    }
+    @Hidden
+    @GetMapping(value = "/me", produces = "application/hal+json")
+    public EntityModel<Object> consultarHal() { return hal.recurso(consultarAtual()); }
+    @Hidden
+    @PutMapping(value = "/me", produces = "application/hal+json")
+    public EntityModel<Object> atualizarHal(@Valid @RequestBody AtualizarUsuarioRequest request) { return hal.recurso(atualizarAtual(request)); }
 }
