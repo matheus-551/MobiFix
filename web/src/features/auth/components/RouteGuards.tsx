@@ -16,15 +16,14 @@ import { homeForRole } from "../utils/homeFor";
  * regras do Firestore/Storage (firebase/*.rules), nunca apenas por estes redirecionamentos.
  */
 
-/** Exige usuário autenticado, e-mail verificado e papel compatível. */
+/** Exige usuário autenticado e papel compatível. */
 export function RequireAuth({ role, children }: { role: UserRole; children: ReactNode }) {
   const router = useRouter();
-  const { status, user, account, emailVerified, error } = useAuth();
+  const { status, user, account, error } = useAuth();
 
   let redirectTo: string | null = null;
   if (status === "ready" && !error) {
     if (!user) redirectTo = routes.login;
-    else if (!emailVerified) redirectTo = routes.verifyEmail;
     else if (account && account.role !== role) redirectTo = homeForRole(account.role);
   }
 
@@ -68,12 +67,12 @@ export function RequireAuth({ role, children }: { role: UserRole; children: Reac
 /** Para páginas de visitante (login, cadastro): redireciona quem já está autenticado. */
 export function GuestOnly({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { status, user, account, emailVerified } = useAuth();
+  const { status, user, account } = useAuth();
 
   let redirectTo: string | null = null;
   // Sem `account` o perfil ainda está sendo gravado (cadastro em andamento): não redirecionar.
   if (status === "ready" && user && account) {
-    redirectTo = emailVerified ? homeForRole(account.role) : routes.verifyEmail;
+    redirectTo = homeForRole(account.role);
   }
 
   useEffect(() => {

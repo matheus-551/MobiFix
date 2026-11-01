@@ -89,7 +89,7 @@ function ClientSignupForm() {
     setLoading(true);
     try {
       await registerClient(values);
-      router.replace(routes.verifyEmail);
+      router.replace(routes.clientHome);
     } catch (error) {
       setFormError(getErrorMessage(error));
       setLoading(false);

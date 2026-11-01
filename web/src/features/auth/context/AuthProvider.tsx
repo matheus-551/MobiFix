@@ -2,7 +2,6 @@
 
 import {
   createContext,
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -20,10 +19,7 @@ export interface AuthState {
   user: User | null;
   /** Documento `users/{uid}`; `null` se ainda não existe (ex.: durante o cadastro). */
   account: UserAccount | null;
-  emailVerified: boolean;
   error: string | null;
-  /** Recarrega o usuário no Firebase (necessário após verificar o e-mail). */
-  refreshUser: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthState | null>(null);
@@ -32,11 +28,10 @@ interface Snapshot {
   status: "loading" | "ready";
   user: User | null;
   account: UserAccount | null;
-  emailVerified: boolean;
   error: string | null;
 }
 
-const INITIAL: Snapshot = { status: "loading", user: null, account: null, emailVerified: false, error: null };
+const INITIAL: Snapshot = { status: "loading", user: null, account: null, error: null };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Snapshot>(INITIAL);
@@ -53,11 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           unsubscribeAccount = undefined;
 
           if (!user) {
-            setState({ status: "ready", user: null, account: null, emailVerified: false, error: null });
+            setState({ status: "ready", user: null, account: null, error: null });
             return;
           }
 
-          setState({ status: "loading", user, account: null, emailVerified: user.emailVerified, error: null });
+          setState({ status: "loading", user, account: null, error: null });
           unsubscribeAccount = subscribeToAccount(
             user.uid,
             (account) =>
@@ -66,7 +61,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 status: "ready",
                 user,
                 account,
-                emailVerified: user.emailVerified,
                 error: null,
               })),
             (error) => setState((current) => ({ ...current, status: "ready", error: getErrorMessage(error) })),
@@ -85,14 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const refreshUser = useCallback(async () => {
-    const user = getFirebaseAuth().currentUser;
-    if (!user) return;
-    await user.reload();
-    setState((current) => ({ ...current, emailVerified: user.emailVerified }));
-  }, []);
-
-  const value = useMemo<AuthState>(() => ({ ...state, refreshUser }), [state, refreshUser]);
+  const value = useMemo<AuthState>(() => ({ ...state }), [state]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

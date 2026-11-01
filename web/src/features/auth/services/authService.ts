@@ -1,16 +1,13 @@
 import {
-  applyActionCode,
   browserLocalPersistence,
   browserSessionPersistence,
   createUserWithEmailAndPassword,
   deleteUser,
-  sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
-  type User,
 } from "firebase/auth";
 import { doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getDb, getFirebaseAuth } from "@/shared/lib/firebase/client";
@@ -26,11 +23,6 @@ export interface ClientRegistrationInput {
   password: string;
 }
 
-export interface RegistrationResult {
-  /** Falso quando a conta foi criada, mas o e-mail de verificação não pôde ser enviado (o usuário pode reenviar). */
-  verificationEmailSent: boolean;
-}
-
 /** `remember` = persistência local (sobrevive ao fechamento do navegador); caso contrário, apenas a sessão da aba. */
 export async function signIn(email: string, password: string, remember: boolean): Promise<void> {
   const auth = getFirebaseAuth();
@@ -40,21 +32,6 @@ export async function signIn(email: string, password: string, remember: boolean)
 
 export async function signOutUser(): Promise<void> {
   await signOut(getFirebaseAuth());
-}
-
-/**
- * O destino é a página de verificação. Se o modelo de e-mail do Firebase estiver
- * configurado com URL de ação personalizada (README), o link chega com `oobCode`.
- */
-export async function sendVerificationEmail(user: User): Promise<void> {
-  await sendEmailVerification(user, { url: `${window.location.origin}${routes.verifyEmail}` });
-}
-
-/** Aplica o código `oobCode` do link de verificação (inválido/expirado lança `auth/*-action-code`). */
-export async function confirmEmailVerification(oobCode: string): Promise<void> {
-  await applyActionCode(getFirebaseAuth(), oobCode);
-  // Atualiza o usuário atual, caso a verificação ocorra na mesma sessão.
-  await getFirebaseAuth().currentUser?.reload();
 }
 
 /**
@@ -76,7 +53,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
  * escrita atômica. Se a gravação falhar, a conta recém-criada é removida para não deixar
  * um usuário sem perfil.
  */
-export async function registerClient(input: ClientRegistrationInput): Promise<RegistrationResult> {
+export async function registerClient(input: ClientRegistrationInput): Promise<void> {
   const auth = getFirebaseAuth();
   const email = input.email.trim().toLowerCase();
   const credential = await createUserWithEmailAndPassword(auth, email, input.password);
@@ -109,6 +86,4 @@ export async function registerClient(input: ClientRegistrationInput): Promise<Re
     await deleteUser(user).catch(() => undefined);
     throw error;
   }
-
-  return { verificationEmailSent: await sendVerificationEmail(user).then(() => true, () => false) };
 }
