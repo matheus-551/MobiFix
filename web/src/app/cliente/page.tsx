@@ -1,8 +1,14 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import ClientHome from "@/features/cliente/pages/ClientHome";
+import MyAppointments from "@/features/cliente/pages/MyAppointments";
+import { LoadingBlock } from "@/features/cliente/components/StateViews";
 
-export const metadata: Metadata = { title: "Painel do cliente | MobiFix" };
+export const metadata: Metadata = { title: "Meus agendamentos | MobiFix" };
 
 export default function Page() {
-  return <ClientHome />;
+  return (
+    <Suspense fallback={<LoadingBlock />}>
+      <MyAppointments />
+    </Suspense>
+  );
 }
