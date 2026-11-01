@@ -29,14 +29,17 @@ npm run dev                  # http://localhost:3000
 7. **Storage**: ative o Cloud Storage (exige plano Blaze em projetos novos) e publique `firebase/storage.rules`.
 8. Publicar regras: cole o conteúdo no console, ou use `npm i -g firebase-tools && firebase login && firebase use <projectId> && firebase deploy --only firestore:rules,storage`.
 
-### Verificação de e-mail (adaptação ao Firebase)
+### Verificação de e-mail
 
-O Firebase Authentication verifica e-mails **por link**, não por código de 6 dígitos. Por isso a tela `/verificar-email` mantém o cartão e o ícone do protótipo, mas no lugar dos seis campos oferece: "Já confirmei meu e-mail", reenvio com intervalo de 60 s e atualização automática ao voltar para a aba. Um OTP real exigiria backend e provedor de e-mail próprios.
+A verificação de e-mail foi removida do frontend: após o cadastro ou o login o usuário vai direto ao painel do seu papel. Login, cadastro, sessão e recuperação de senha seguem iguais.
 
-Dois modos de link são suportados:
+## Integração com a API Spring Boot
 
-- **Padrão do Firebase**: o link abre a página hospedada pelo Firebase; depois o usuário volta ao site e clica em "Já confirmei".
-- **Página própria (recomendado)**: em *Modelos de e-mail → Verificação → editar URL de ação*, use `https://SEU-DOMINIO/verificar-email`. O link chega com `mode=verifyEmail&oobCode=...` e a página conclui a verificação, tratando links inválidos ou expirados.
+O navegador chama `/api/v1/...` na própria origem e o `rewrite` de `next.config.ts` repassa para `API_URL` (padrão `http://localhost:8080`), evitando CORS. Cliente HTTP único: `src/shared/lib/api/http.ts`.
+
+Endpoints usados: `GET /prestadores`, `GET /prestadores/{id}`, `GET /prestadores/{id}/horarios`, `GET /tipos-veiculo`, `GET /especialidades`, `GET|POST /usuarios(/me)`, `GET|POST|DELETE /veiculos`.
+
+Limitações atuais da API (não simuladas): sem agendamentos, avaliações, serviços com preço/duração, nota média, imagens ou busca textual; autenticação ainda é uma identidade simulada no servidor (todos os logins compartilham o mesmo usuário/veículos da API). Agendamentos e avaliações ficam no Firestore (`appointments`, `reviews`; regras em `firebase/firestore.rules`, que precisam ser publicadas) e são acessados só por `features/cliente/services/appointmentService.ts` e `reviewService.ts`.
 
 ## Modelo de dados (Firestore)
 
@@ -48,7 +51,7 @@ Dois modos de link são suportados:
 
 Decisões: o UID do Authentication é a chave de identidade; senhas ficam só no Authentication. As relações N:N `PROVIDER_SPECIALTY` e `PROVIDER_VEHICLE_TYPE` viraram arrays no perfil. `SPECIALTY` e `VEHICLE_TYPE` são catálogos em `src/shared/constants/catalog.ts`. `VEHICLE`, `AVAILABILITY_SLOT`, `APPOINTMENT` e `REVIEW` estão tipados em `src/shared/types/domain.ts`, mas ainda sem telas, serviços ou regras.
 
-Estados do prestador: cadastro (conta criada) → e-mail verificado (Authentication) → análise documental → aprovação (`approvalStatus: approved`). O cadastro cria `status: pending` / `under_review`; **aprovar é manual** e exige alterar o documento no Console (ou Admin SDK). Para criar um administrador, defina manualmente `users/{uid}.role = "admin"` no Console.
+Estados do prestador: cadastro (conta criada) → análise documental → aprovação (`approvalStatus: approved`). O cadastro cria `status: pending` / `under_review`; **aprovar é manual** e exige alterar o documento no Console (ou Admin SDK). Para criar um administrador, defina manualmente `users/{uid}.role = "admin"` no Console.
 
 ## Segurança
 
@@ -69,7 +72,7 @@ npm run build      # build de produção
 
 ```
 src/app/                 rotas (uma pasta por URL) e layout
-src/features/auth/       login, cadastro de cliente, recuperação, verificação, contexto e guardas
+src/features/auth/       login, cadastro de cliente, recuperação, contexto e guardas
 src/features/cliente/    painel do cliente
 src/features/prestador/  cadastro em 5 etapas, validação, serviço de registro, painel
 src/features/home/       landing page
@@ -81,13 +84,13 @@ firebase/                regras do Firestore e do Storage
 
 ## Rotas
 
-`/` · `/login` · `/cadastro` · `/cadastro/prestador` · `/verificar-email` · `/recuperar-senha` · `/cliente` (cliente) · `/prestador` (prestador) · `/termos` · `/privacidade`
+`/` · `/login` · `/cadastro` · `/cadastro/prestador` · `/recuperar-senha` · `/cliente` e `/cliente/{prestadores, prestadores/resultados, prestadores/perfil, agendar, agendamentos, agendamentos/avaliar, veiculos}` (cliente) · `/prestador` (prestador) · `/termos` · `/privacidade`
 
 A rota dinâmica genérica `/[pagina]` foi removida; `/login` continua igual.
 
 ## Pendências
 
 - Textos jurídicos reais de `/termos` e `/privacidade`.
-- Telas de busca, perfil do prestador, agendamentos, veículos e avaliações (botões da landing page "Buscar" e "Ver perfil e agendar" ainda não têm destino).
+- Botões da landing page "Buscar" e "Ver perfil e agendar" ainda não têm destino.
 - Login social (Google/Apple) foi removido por não estar implementado.
 - Painel administrativo e aprovação de prestadores.

@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Coleções: users/{uid}, clientProfiles/{uid}, providerProfiles/{uid}.
+// Coleções: users/{uid}, clientProfiles/{uid}, providerProfiles/{uid}, appointments/{id}, reviews/{appointmentId}.
 // Papel (role), status e aprovação NUNCA podem ser alterados pelo próprio usuário.
 // O papel "admin" só pode ser atribuído manualmente no console / Admin SDK.
 service cloud.firestore {
@@ -98,6 +98,62 @@ service cloud.firestore {
       allow update: if isAdmin();
 
       allow delete: if false;
+    }
+
+    // Agendamentos do cliente. ID = {uid}_{slotId} (impede duplicidade). O cliente só cria como "requested"
+    // e só pode cancelar; "confirmed"/"completed" são definidos por admin (ou, no futuro, pelo prestador/API).
+    match /appointments/{appointmentId} {
+      // resource == null permite o getDoc de verificação de duplicidade em documento ainda inexistente.
+      allow read: if signedIn() && (resource == null || resource.data.clientId == request.auth.uid || isAdmin());
+
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && appointmentId == request.auth.uid + '_' + request.resource.data.slotId
+        && request.resource.data.keys().hasOnly([
+          'clientId', 'providerId', 'providerName', 'vehicleId', 'vehicleLabel', 'specialtyIds',
+          'specialtyNames', 'slotId', 'date', 'time', 'description', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.status == 'requested'
+        && request.resource.data.providerId is string && request.resource.data.providerId.size() > 0
+        && request.resource.data.vehicleId is string && request.resource.data.vehicleId.size() > 0
+        && request.resource.data.slotId is string && request.resource.data.slotId.size() > 0
+        && request.resource.data.date is string && request.resource.data.date.size() == 10
+        && request.resource.data.time is string && request.resource.data.time.size() == 5
+        && request.resource.data.specialtyIds is list && request.resource.data.specialtyIds.size() in range(1, 21)
+        && request.resource.data.description is string && request.resource.data.description.size() <= 500
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if signedIn()
+        && resource.data.clientId == request.auth.uid
+        && resource.data.status in ['requested', 'confirmed']
+        && onlyChanges(['status', 'updatedAt'])
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin();
+
+      allow delete: if false;
+    }
+
+    // Avaliações são públicas para usuários autenticados (aparecem no perfil do prestador).
+    // Uma por atendimento concluído: ID = ID do agendamento; sem edição ou exclusão.
+    match /reviews/{appointmentId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.appointmentId == appointmentId
+        && exists(/databases/$(database)/documents/appointments/$(appointmentId))
+        && get(/databases/$(database)/documents/appointments/$(appointmentId)).data.clientId == request.auth.uid
+        && get(/databases/$(database)/documents/appointments/$(appointmentId)).data.status == 'completed'
+        && request.resource.data.providerId == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.providerId
+        && request.resource.data.keys().hasOnly(['appointmentId', 'providerId', 'clientId', 'clientName', 'rating', 'comment', 'createdAt'])
+        && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 1000
+        && request.resource.data.clientName is string && request.resource.data.clientName.size() in range(1, 101)
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
     }
 
     match /{document=**} {
