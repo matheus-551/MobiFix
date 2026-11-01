@@ -1,5 +1,10 @@
 package br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web;
 
+import br.com.edu.ifpe.mobifix.api.shared.infrastructure.web.hal.ApiHalAssembler;
+import io.swagger.v3.oas.annotations.Hidden;
+import org.springframework.hateoas.EntityModel;
+import org.springframework.hateoas.CollectionModel;
+
 import java.util.List;
 import br.com.edu.ifpe.mobifix.api.veiculo.application.AtualizarVeiculoCommand;
 import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web.dto.AtualizarVeiculoRequest;
@@ -15,11 +20,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/veiculos")
+@RequestMapping(value = "/api/v1/veiculos", produces = "application/json")
 public class VeiculoController {
+    private final ApiHalAssembler hal;
     private final VeiculosDoCliente veiculos;
     private final UUID firebaseIdMock;
-    public VeiculoController(VeiculosDoCliente veiculos, @Value("${app.mock.firebase-id}") UUID firebaseIdMock) {
+    public VeiculoController(VeiculosDoCliente veiculos, @Value("${app.mock.firebase-id}") UUID firebaseIdMock, ApiHalAssembler hal) {
+        this.hal = hal;
         this.veiculos = veiculos;
         this.firebaseIdMock = firebaseIdMock;
     }
@@ -44,7 +51,7 @@ public class VeiculoController {
                 request.tipoVeiculoId(), request.marca(), request.modelo(), request.ano(), request.placa())));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping(value = "/{id}", produces = {"application/json", "application/hal+json"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void desativar(@PathVariable UUID id) {
         veiculos.desativar(firebaseIdMock.toString(), id);
@@ -53,4 +60,18 @@ public class VeiculoController {
         return new VeiculoResponse(veiculo.id(), veiculo.clienteId(), veiculo.tipoVeiculoId(),
                 veiculo.marca(), veiculo.modelo(), veiculo.ano(), veiculo.placa());
     }
+
+    @Hidden
+    @PostMapping(produces = "application/hal+json")
+    @ResponseStatus(HttpStatus.CREATED)
+    public EntityModel<Object> criarHal(@Valid @RequestBody CriarVeiculoRequest request) { return hal.recurso(criar(request)); }
+    @Hidden
+    @GetMapping(value = "/me", produces = "application/hal+json")
+    public CollectionModel<?> listarHal() { return hal.colecao(listarMeus(), VeiculoResponse.class); }
+    @Hidden
+    @GetMapping(value = "/{id}", produces = "application/hal+json")
+    public EntityModel<Object> consultarHal(@PathVariable UUID id) { return hal.recurso(consultar(id)); }
+    @Hidden
+    @PutMapping(value = "/{id}", produces = "application/hal+json")
+    public EntityModel<Object> atualizarHal(@PathVariable UUID id, @Valid @RequestBody AtualizarVeiculoRequest request) { return hal.recurso(atualizar(id, request)); }
 }

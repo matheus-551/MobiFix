@@ -24,8 +24,8 @@ class PrestadorPublicoControllerTest {
     private MockMvc mvc;
     @BeforeEach
     void configurar() {
-        mvc = MockMvcBuilders.standaloneSetup(new PrestadorPublicoController(caso))
-                .setControllerAdvice(new PrestadorPublicoExceptionHandler()).build();
+        mvc = MockMvcBuilders.standaloneSetup(new PrestadorPublicoController(caso, null))
+                .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/").accept(org.springframework.http.MediaType.APPLICATION_JSON)).setControllerAdvice(new PrestadorPublicoExceptionHandler()).build();
     }
     @Test
     void listaPublicaSemIdentidadeComPaginacaoPadrao() throws Exception {

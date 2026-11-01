@@ -27,8 +27,8 @@ class VeiculoControllerTest {
             """;
     @BeforeEach
     void configurar() {
-        mvc = MockMvcBuilders.standaloneSetup(new VeiculoController(caso, identidade))
-                .setControllerAdvice(new VeiculoExceptionHandler()).build();
+        mvc = MockMvcBuilders.standaloneSetup(new VeiculoController(caso, identidade, null))
+                .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/").accept(org.springframework.http.MediaType.APPLICATION_JSON)).setControllerAdvice(new VeiculoExceptionHandler()).build();
     }
     @Test
     void consultaPorUuid() throws Exception {
