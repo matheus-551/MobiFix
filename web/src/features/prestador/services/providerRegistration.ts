@@ -4,7 +4,6 @@ import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { getDb, getFirebaseAuth, getFirebaseStorage } from "@/shared/lib/firebase/client";
 import { onlyDigits } from "@/shared/utils/format";
 import type { ProviderDocument } from "@/shared/types/domain";
-import { sendVerificationEmail, type RegistrationResult } from "@/features/auth/services/authService";
 import {
   DOCUMENT_KIND_BY_FIELD,
   type DocumentField,
@@ -22,7 +21,7 @@ function safeFileName(name: string): string {
  * que foi criado (arquivos e conta). O prestador nasce com `status: "pending"` e
  * `approvalStatus: "under_review"`; a aprovação é uma ação administrativa posterior.
  */
-export async function registerProvider(values: ProviderFormValues): Promise<RegistrationResult> {
+export async function registerProvider(values: ProviderFormValues): Promise<void> {
   const auth = getFirebaseAuth();
   const email = values.email.trim().toLowerCase();
   const { user } = await createUserWithEmailAndPassword(auth, email, values.password);
@@ -76,6 +75,4 @@ export async function registerProvider(values: ProviderFormValues): Promise<Regi
     await deleteUser(user).catch(() => undefined);
     throw error;
   }
-
-  return { verificationEmailSent: await sendVerificationEmail(user).then(() => true, () => false) };
 }

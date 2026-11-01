@@ -94,7 +94,7 @@ function ProviderSignupForm() {
     setLoading(true);
     try {
       await registerProvider(values);
-      router.replace(routes.verifyEmail);
+      router.replace(routes.providerHome);
     } catch (error) {
       setFormError(getErrorMessage(error));
       setLoading(false);

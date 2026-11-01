@@ -51,10 +51,9 @@ function ProviderDashboard() {
   const approval = profile ? APPROVAL_TEXT[profile.approvalStatus] : null;
   const approved = profile?.approvalStatus === "approved";
 
-  // Etapas distintas: cadastro e e-mail são fatos já cumpridos aqui (a guarda exige e-mail verificado).
+  // Etapas distintas: o cadastro já foi enviado; análise e aprovação dependem do status do perfil.
   const steps = [
     { label: "Cadastro enviado", done: true },
-    { label: "E-mail verificado", done: true },
     { label: "Análise documental", done: approved || profile?.approvalStatus === "rejected" },
     { label: "Aprovação profissional", done: approved },
   ];
