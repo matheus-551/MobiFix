@@ -14,6 +14,11 @@ export const routes = {
   clientReview: "/cliente/agendamentos/avaliar",
   clientVehicles: "/cliente/veiculos",
   providerHome: "/prestador",
+  providerRequests: "/prestador/solicitacoes",
+  providerSchedule: "/prestador/agenda",
+  providerHistory: "/prestador/historico",
+  providerReviews: "/prestador/avaliacoes",
+  providerProfile: "/prestador/perfil",
   terms: "/termos",
   privacy: "/privacidade",
 } as const;
