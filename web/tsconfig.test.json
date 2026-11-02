@@ -3,15 +3,14 @@
   "compilerOptions": {
     "noEmit": false,
     "incremental": false,
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
+    "module": "node16",
+    "moduleResolution": "node16",
     "outDir": ".test-build",
-    "rootDir": "src/server",
+    "rootDir": "src",
     "plugins": [],
     "types": ["node"],
     "isolatedModules": false
   },
-  "include": ["src/server/**/*.ts"],
+  "include": ["src/features/auth/utils/*.ts"],
   "exclude": ["node_modules"]
 }

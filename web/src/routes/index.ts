@@ -5,6 +5,8 @@ export const routes = {
   signup: "/cadastro",
   providerSignup: "/cadastro/prestador",
   forgotPassword: "/recuperar-senha",
+  verifyEmail: "/verificar-email",
+  authAction: "/auth/acao",
   clientHome: "/cliente",
   clientSearch: "/cliente/prestadores",
   clientResults: "/cliente/prestadores/resultados",
