@@ -11,7 +11,7 @@ import { TextField } from "@/shared/components/FormControls";
 import { getErrorMessage } from "@/shared/utils/firebaseErrors";
 import { validateEmail } from "@/shared/validators/fields";
 import { GuestOnly } from "../components/RouteGuards";
-import { requestPasswordReset } from "../services/authService";
+import { requestPasswordReset, ResendBlockedError } from "../services/authService";
 
 function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -34,7 +34,7 @@ function ForgotPasswordForm() {
       await requestPasswordReset(email);
       setSentTo(email.trim());
     } catch (failure) {
-      setFormError(getErrorMessage(failure));
+      setFormError(failure instanceof ResendBlockedError ? failure.message : getErrorMessage(failure));
     } finally {
       setLoading(false);
     }

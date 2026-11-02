@@ -19,11 +19,13 @@ import { homeForRole } from "../utils/homeFor";
 /** Exige usuário autenticado e papel compatível. */
 export function RequireAuth({ role, children }: { role: UserRole; children: ReactNode }) {
   const router = useRouter();
-  const { status, user, account, error } = useAuth();
+  const { status, user, emailVerified, account, error } = useAuth();
 
   let redirectTo: string | null = null;
   if (status === "ready" && !error) {
     if (!user) redirectTo = routes.login;
+    // E-mail não verificado: nenhuma área protegida é liberada (as regras do Firestore também exigem).
+    else if (!emailVerified) redirectTo = routes.verifyEmail;
     else if (account && account.role !== role) redirectTo = homeForRole(account.role);
   }
 
@@ -65,17 +67,19 @@ export function RequireAuth({ role, children }: { role: UserRole; children: Reac
 }
 
 /**
- * Para páginas de visitante (login, cadastro): redireciona quem já está autenticado.
- * `hold` suspende o redirecionamento (usado pelos cadastros enquanto mostram a confirmação de sucesso).
+ * Para páginas de visitante (login, cadastro): redireciona quem já está autenticado (verificado → painel; não verificado → verificação).
+ * `hold` suspende o redirecionamento (usado pelos cadastros enquanto criam a conta e mostram a verificação).
  */
 export function GuestOnly({ children, hold = false }: { children: ReactNode; hold?: boolean }) {
   const router = useRouter();
-  const { status, user, account } = useAuth();
+  const { status, user, emailVerified, account } = useAuth();
 
   let redirectTo: string | null = null;
-  // Sem `account` o perfil ainda está sendo gravado (cadastro em andamento): não redirecionar.
-  if (status === "ready" && user && account && !hold) {
-    redirectTo = homeForRole(account.role);
+  if (user && !hold) {
+    // Sessão sem e-mail verificado: segue para a tela de verificação (que oferece reenvio e saída).
+    if (!emailVerified) redirectTo = routes.verifyEmail;
+    // Sem `account` o perfil ainda está sendo gravado: não redirecionar.
+    else if (status === "ready" && account) redirectTo = homeForRole(account.role);
   }
 
   useEffect(() => {

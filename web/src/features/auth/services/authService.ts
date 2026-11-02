@@ -1,19 +1,26 @@
 import {
   browserLocalPersistence,
   browserSessionPersistence,
+  createUserWithEmailAndPassword,
   deleteUser,
+  sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
+  type User,
 } from "firebase/auth";
 import { doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getDb, getFirebaseAuth } from "@/shared/lib/firebase/client";
 import { getErrorCode } from "@/shared/utils/firebaseErrors";
-import { onlyDigits } from "@/shared/utils/format";
 import { routes } from "@/routes";
-import { registerUserInApi, type ApiSyncResult } from "./apiRegistration";
-import { createVerifiedAccount } from "./emailVerificationService";
+import { checkResend, describeBlock, markSent } from "../utils/resendPolicy";
+
+/**
+ * Autenticação exclusivamente via Firebase Authentication: cadastro, verificação de e-mail,
+ * login e redefinição de senha usam apenas o SDK (sem códigos próprios nem provedor de e-mail externo).
+ */
 
 export interface ClientRegistrationInput {
   firstName: string;
@@ -22,31 +29,85 @@ export interface ClientRegistrationInput {
   phone: string;
   state: string;
   password: string;
-  /** Token de uso único devolvido pelo servidor depois que o código do e-mail foi confirmado. */
-  verificationToken: string;
 }
 
-export interface ClientRegistrationResult {
-  /** Resultado do `POST /api/v1/usuarios`; `ok: false` não desfaz o cadastro no Firebase. */
-  api: ApiSyncResult;
+export interface RegistrationResult {
+  /** `false` quando a conta foi criada mas o e-mail não pôde ser enviado; a tela oferece o reenvio. */
+  verificationEmailSent: boolean;
 }
+
+/** Lançado quando o reenvio é barrado pela política local (intervalo mínimo / limite por hora). */
+export class ResendBlockedError extends Error {
+  constructor(
+    message: string,
+    public readonly waitSeconds: number,
+  ) {
+    super(message);
+    this.name = "ResendBlockedError";
+  }
+}
+
+function actionSettings() {
+  return { url: `${window.location.origin}${routes.login}` };
+}
+
+/** Chave do histórico de envios: por usuário (verificação) ou por e-mail (redefinição de senha). */
+export const verificationKey = (uid: string) => `verify:${uid}`;
+const resetKey = (email: string) => `reset:${email.trim().toLowerCase()}`;
 
 /** `remember` = persistência local (sobrevive ao fechamento do navegador); caso contrário, apenas a sessão da aba. */
-export async function signIn(email: string, password: string, remember: boolean): Promise<void> {
+export async function signIn(email: string, password: string, remember: boolean): Promise<{ emailVerified: boolean }> {
   const auth = getFirebaseAuth();
   await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
-  await signInWithEmailAndPassword(auth, email.trim(), password);
+  const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+  return { emailVerified: credential.user.emailVerified };
 }
 
 export async function signOutUser(): Promise<void> {
   await signOut(getFirebaseAuth());
 }
 
+/** Envia o e-mail de verificação nativo do Firebase e registra o envio na política de reenvio. */
+export async function dispatchVerificationEmail(user: User): Promise<boolean> {
+  try {
+    await sendEmailVerification(user, actionSettings());
+    markSent(verificationKey(user.uid));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reenvio manual (botão "Reenviar e-mail"), respeitando intervalo mínimo e limite por hora. */
+export async function resendVerificationEmail(): Promise<void> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Sessão não encontrada.");
+  const decision = checkResend(verificationKey(user.uid));
+  if (!decision.allowed) throw new ResendBlockedError(describeBlock(decision), decision.waitSeconds);
+  await sendEmailVerification(user, actionSettings());
+  markSent(verificationKey(user.uid));
+}
+
+/**
+ * Atualiza o usuário no Firebase e renova o ID Token. A renovação é o que faz o claim `email_verified`
+ * chegar às regras do Firestore/Storage e ao backend (Spring Boot) com o valor atualizado.
+ */
+export async function refreshEmailVerification(): Promise<boolean> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return false;
+  await user.reload();
+  if (user.emailVerified) await user.getIdToken(true);
+  return user.emailVerified;
+}
+
 /**
  * Não revela se o e-mail existe: `auth/user-not-found` é tratado como sucesso para evitar
- * enumeração de contas.
+ * enumeração de contas. Aplica o mesmo intervalo mínimo dos demais reenvios.
  */
 export async function requestPasswordReset(email: string): Promise<void> {
+  const key = resetKey(email);
+  const decision = checkResend(key);
+  if (!decision.allowed) throw new ResendBlockedError(describeBlock(decision), decision.waitSeconds);
   try {
     await sendPasswordResetEmail(getFirebaseAuth(), email.trim(), {
       url: `${window.location.origin}${routes.login}`,
@@ -54,30 +115,40 @@ export async function requestPasswordReset(email: string): Promise<void> {
   } catch (error) {
     if (getErrorCode(error) !== "auth/user-not-found") throw error;
   }
+  markSent(key);
 }
 
 /**
- * Cadastro do cliente (executado só depois da verificação do e-mail):
- * 1. o servidor cria a conta no Authentication já com `emailVerified: true` (exige o token da verificação);
- * 2. o navegador entra com a conta e grava `users` + `clientProfiles` em uma escrita atômica
- *    (as regras do Firestore exigem `email_verified`); se falhar, a conta é removida;
- * 3. o usuário é cadastrado na API (`POST /api/v1/usuarios`, tipo CLIENTE).
+ * Cria a conta no Firebase Authentication (a senha nunca passa por nosso código além deste SDK) e
+ * mantém o usuário logado, pois o envio/reenvio do link de verificação exige sessão.
  */
-export async function registerClient(input: ClientRegistrationInput): Promise<ClientRegistrationResult> {
+export async function createAccount(email: string, password: string, displayName: string): Promise<User> {
+  const auth = getFirebaseAuth();
+  await setPersistence(auth, browserLocalPersistence);
+  const { user } = await createUserWithEmailAndPassword(auth, email, password);
+  await updateProfile(user, { displayName }).catch(() => undefined);
+  return user;
+}
+
+/** Desfaz a conta recém-criada quando a gravação do perfil falha (evita conta sem perfil). */
+export async function discardAccount(user: User): Promise<void> {
+  await deleteUser(user).catch(() => undefined);
+}
+
+/**
+ * Cadastro do cliente:
+ * 1. `createUserWithEmailAndPassword` cria a conta (e-mail ainda NÃO verificado);
+ * 2. `users` + `clientProfiles` são gravados em uma escrita atômica (se falhar, a conta é removida);
+ * 3. `sendEmailVerification` envia o link nativo. O acesso às áreas protegidas só é liberado
+ *    depois que o Firebase marcar `emailVerified`.
+ * O usuário correspondente na API é criado sob demanda (`ensureApiUser`) no primeiro acesso verificado.
+ */
+export async function registerClient(input: ClientRegistrationInput): Promise<RegistrationResult> {
   const email = input.email.trim().toLowerCase();
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
 
-  await createVerifiedAccount({
-    email,
-    token: input.verificationToken,
-    password: input.password,
-    displayName: `${firstName} ${lastName}`,
-  });
-  await signIn(email, input.password, true);
-
-  const user = getFirebaseAuth().currentUser;
-  if (!user) throw new Error("Sessão não iniciada após criar a conta.");
+  const user = await createAccount(email, input.password, `${firstName} ${lastName}`);
 
   try {
     const db = getDb();
@@ -99,17 +170,9 @@ export async function registerClient(input: ClientRegistrationInput): Promise<Cl
     });
     await batch.commit();
   } catch (error) {
-    await deleteUser(user).catch(() => undefined);
+    await discardAccount(user);
     throw error;
   }
 
-  const api = await registerUserInApi({
-    nome: firstName,
-    sobrenome: lastName,
-    email,
-    telefone: onlyDigits(input.phone),
-    uf: input.state,
-    tipo: "CLIENTE",
-  });
-  return { api };
+  return { verificationEmailSent: await dispatchVerificationEmail(user) };
 }

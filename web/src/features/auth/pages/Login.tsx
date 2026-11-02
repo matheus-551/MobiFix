@@ -38,7 +38,8 @@ function LoginForm() {
     setLoading(true);
     try {
       await signIn(email, password, remember);
-      // Em caso de sucesso o <GuestOnly> redireciona assim que o perfil for carregado.
+      // Em caso de sucesso o <GuestOnly> redireciona: e-mail verificado → painel; não verificado →
+      // /verificar-email (aviso + reenvio do link). Nenhuma área protegida abre sem verificação.
     } catch (error) {
       setFormError(getErrorMessage(error));
       setLoading(false);
