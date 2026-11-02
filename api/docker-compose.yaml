@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: mobifix
+      POSTGRES_USER: mobifix
+      POSTGRES_PASSWORD: mobfix_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U mobifix -d mobifix" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:

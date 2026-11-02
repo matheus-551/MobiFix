@@ -1,164 +1,195 @@
-# API MobiFix
+# MobiFix API
 
-Backend da plataforma MobiFix, que conecta clientes a prestadores de serviços
-automotivos para manutenção, reparos e agendamentos. Desenvolvido com Java e
-Spring Boot, utiliza PostgreSQL, JPA para persistência e Flyway para versionar
-a estrutura do banco. A API valida ID tokens do Firebase Authentication, vincula
-o UID ao usuário local e registra os autores das alterações na auditoria.
-O endpoint `GET /api/auth/me` retorna os dados do usuário autenticado; os demais
-fluxos de negócio serão implementados nas próximas etapas.
+API de serviços automotivos desenvolvida com Java 25, Spring Boot, Spring Data JPA e PostgreSQL. O Docker Compose executa o banco local; a aplicação é executada separadamente.
 
-## Executar em ambiente local
+## Pré-requisitos
 
-### Pré-requisitos
+- JDK 25 e `JAVA_HOME` apontando para sua instalação.
+- Docker com Docker Compose (no Windows, Docker Desktop iniciado).
+- Maven pelo Wrapper incluído no projeto ou uma instalação local. Maven 3.9.11 foi utilizado na validação do projeto.
+- Acesso à internet na primeira execução para baixar dependências e a imagem do PostgreSQL.
 
-- JDK 25 ou superior, configurado no terminal ou na IDE.
-- Docker Desktop iniciado, usando containers Linux.
-- Um projeto Firebase com Authentication configurado e um usuário com e-mail verificado.
-- Acesso à internet na primeira execução para baixar as dependências e a imagem do banco.
+Os comandos abaixo usam PowerShell e devem ser executados na pasta `api` do repositório.
 
-O projeto inclui o Maven Wrapper; não é necessário instalar o Maven separadamente.
-Execute os comandos abaixo dentro da pasta `api`.
+## Executar localmente
 
-### 1. Configurar e iniciar o banco
-
-Na primeira configuração, copie `.env.example` para `.env`:
-
-```bash
-# Git Bash
-cp -n .env.example .env
-```
-
-No PowerShell, use `Copy-Item .env.example .env` somente se `.env` ainda não existir.
-Edite o arquivo para definir os valores locais, por exemplo:
-
-```dotenv
-POSTGRES_DB=mobifix
-POSTGRES_USER=mobifix
-POSTGRES_PASSWORD=mobifix_local
-POSTGRES_PORT=5433
-```
-
-```bash
-docker compose up -d --wait
-```
-
-A porta `5433` é usada no computador; dentro do container o PostgreSQL utiliza
-`5432`. Se a porta escolhida estiver indisponível, altere `POSTGRES_PORT` e ajuste
-a URL da aplicação para a mesma porta.
-
-### 2. Executar a API
-
-O Compose lê o `.env`, mas a aplicação Java não o carrega automaticamente.
-Configure `DB_URL`, `DB_USERNAME` e `DB_PASSWORD` com os valores definidos no passo anterior.
-Configure também `FIREBASE_PROJECT_ID` com o **ID do projeto** exibido nas configurações
-do Firebase, não com a chave de API nem com o ID do aplicativo. Essa variável é obrigatória.
-A validação usa as chaves públicas do Google; não é necessário um arquivo de conta de serviço.
-É necessário acesso à internet para obter e atualizar essas chaves.
-
-**Pelo IntelliJ:**
-
-1. Abra o projeto Maven em `api/pom.xml` e aguarde a importação das dependências.
-2. Acesse **Run → Edit Configurations** e selecione ou crie uma configuração para
-   `br.com.ifpe.mobfix.api.ApiApplication`, usando o módulo da API.
-3. Selecione um JDK 25 ou superior e configure **Environment variables**:
-
-   ```text
-   DB_URL=jdbc:postgresql://127.0.0.1:5433/mobifix
-   DB_USERNAME=mobifix
-   DB_PASSWORD=mobifix_local
-   FIREBASE_PROJECT_ID=seu-id-do-projeto
-   ```
-
-4. Aplique as configurações e execute `ApiApplication` pelo botão **Run**.
-
-**Pelo Git Bash:**
-
-```bash
-export DB_URL='jdbc:postgresql://127.0.0.1:5433/mobifix'
-export DB_USERNAME='mobifix'
-export DB_PASSWORD='mobifix_local'
-export FIREBASE_PROJECT_ID='seu-id-do-projeto'
-./mvnw spring-boot:run
-```
-
-**Pelo PowerShell:**
+### 1. Conferir o Java
 
 ```powershell
-$env:DB_URL = 'jdbc:postgresql://127.0.0.1:5433/mobifix'
-$env:DB_USERNAME = 'mobifix'
-$env:DB_PASSWORD = 'mobifix_local'
-$env:FIREBASE_PROJECT_ID = 'seu-id-do-projeto'
+java -version
+.\mvnw.cmd -version
+```
+
+Ambos devem indicar Java 25. No IntelliJ, configure também o SDK do projeto, o nível de linguagem e o JDK do Maven como Java 25. Se utilizar Maven instalado, confira com `mvn -version`.
+
+### 2. Iniciar o PostgreSQL
+
+```powershell
+docker compose up -d
+docker compose ps
+```
+
+Configuração local definida em `docker-compose.yaml`:
+
+| Campo | Valor |
+| --- | --- |
+| Host | `localhost` |
+| Porta no computador | `5433` |
+| Porta no container | `5432` |
+| Banco | `mobifix` |
+| Usuário | `mobifix` |
+| Senha de desenvolvimento | `mobfix_dev` |
+| URL JDBC | `jdbc:postgresql://localhost:5433/mobifix` |
+
+O mapeamento `5433:5432` permite acessar o PostgreSQL pelo computador na porta 5433. As credenciais acima são apenas para desenvolvimento local.
+
+### 3. Iniciar a API
+
+```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-Na inicialização, o Flyway aplica as migrações pendentes e o Hibernate valida o banco.
-A mensagem `Started ApiApplication` indica que a inicialização foi concluída.
-O endereço padrão é `http://localhost:8080`. As rotas exigem autenticação; acessar
-pelo navegador sem um token retorna 401. Não há página inicial.
+Como alternativa, utilizando Maven instalado:
 
-### 3. Validar a autenticação
-
-O login é feito no Firebase pelo cliente Web/Mobile. Envie o **ID token** obtido
-com `getIdToken()` no header `Authorization: Bearer <ID_TOKEN>` da requisição:
-
-```bash
-curl http://localhost:8080/api/auth/me \
-  -H "Authorization: Bearer <ID_TOKEN>"
+```powershell
+mvn spring-boot:run
 ```
 
-O usuário precisa existir na tabela `usuario`, com `firebase_uid` igual ao UID
-validado no token, `habilitado=true`, `status=ATIVO` e `papel=CLIENTE` ou
-`PRESTADOR`. O token deve indicar `email_verified=true`. A API busca a conta
-pelo UID, nunca pelo e-mail, e usa o UUID interno para `criado_por` e `atualizado_por`.
-Não cria usuários automaticamente e não recebe senhas. O cadastro de contas locais
-será implementado em outra etapa.
+No Linux/macOS, use `./mvnw spring-boot:run`. Pelo IntelliJ, execute a classe `br.com.edu.ifpe.mobifix.api.ApiApplication` com o JDK 25.
 
-Para uma primeira validação **somente no banco local de desenvolvimento**, é possível
-inserir uma conta usando o UID real copiado de Firebase Authentication → Users e um
-email que ainda não exista no banco. Execute pelo cliente SQL conectado ao banco local:
+O Hibernate atualiza as tabelas na inicialização (`ddl-auto: update`); o projeto ainda não utiliza migrations. Os inicializadores cadastram os catálogos de tipos de veículo e especialidades, sem criar automaticamente a conta do usuário simulado.
 
-```sql
-INSERT INTO usuario (
-    id, firebase_uid, email, papel, status, email_verificado,
-    criado_em, atualizado_em, versao, habilitado
-) VALUES (
-    gen_random_uuid(), 'UID_REAL_DO_FIREBASE', 'email-do-usuario@example.com',
-    'CLIENTE', 'ATIVO', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, true
-);
+### 4. Conferir a execução
+
+- API: `http://localhost:8080/api/v1`
+- Swagger UI: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+- OpenAPI: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+
+A URL base não possui necessariamente uma página inicial. Para verificar uma rota existente:
+
+```powershell
+Invoke-RestMethod 'http://localhost:8080/api/v1/tipos-veiculo'
 ```
 
-Essa inserção não cria perfis nem substitui o futuro fluxo de cadastro. Os autores
-da inserção manual ficam nulos porque ela não passa pela autenticação da API.
+### 5. Encerrar
 
-Uma resposta 200 contém `id`, `firebaseUid`, `email` e `papel`. Ausência de token,
-token inválido/expirado, projeto incorreto, email não verificado ou conta local
-inexistente/desabilitada/inativa retornam 401. Claims de papel e email do token
-não substituem os dados locais.
+Use `Ctrl+C` no terminal da API. Para encerrar o banco preservando os dados:
 
-A validação verifica assinatura RS256, emissor, projeto, UID e datas do ID token.
-Não consulta revogações ou bloqueios remotos do Firebase a cada requisição;
-um token já emitido pode continuar válido até expirar. Desabilitar a conta local
-bloqueia as próximas requisições. A auditoria registra criação e última alteração,
-sem um histórico completo de revisões.
-
-### 4. Executar testes e encerrar
-
-Com o banco iniciado e as variáveis de conexão configuradas no terminal
-(use um banco separado de desenvolvimento para os testes):
-
-```bash
-# Git Bash
-./mvnw test
-```
-
-No PowerShell, use `.\mvnw.cmd test`. Os testes de autenticação geram suas próprias
-chaves e tokens; não acessam seu projeto Firebase nem usam tokens reais.
-Para encerrar a API, use **Stop** na IDE ou `Ctrl+C` no terminal. Para parar o banco:
-
-```bash
+```powershell
 docker compose down
 ```
 
-Os dados permanecem no volume. Alterar a senha no `.env` não modifica a senha de
-um banco já inicializado; nesse caso, use a credencial existente ou altere-a no PostgreSQL.
+Os dados ficam no volume `postgres_data`. Alterar a senha no Compose não altera a senha de um banco já inicializado nesse volume.
+
+## Configurações por ambiente
+
+| Variável | Padrão | Finalidade |
+| --- | --- | --- |
+| `DB_URL` | `jdbc:postgresql://localhost:5433/mobifix` | Conexão JDBC do banco |
+| `DB_USERNAME` | `mobifix` | Usuário do banco |
+| `DB_PASSWORD` | `mobfix_dev` | Senha do banco |
+| `APP_MOCK_FIREBASE_ID` | `550e8400-e29b-41d4-a716-446655440101` | Identidade simulada do usuário atual |
+| `SERVER_PORT` | `8080` | Porta HTTP da API |
+
+Exemplo no PowerShell, antes de iniciar a aplicação:
+
+```powershell
+$env:DB_URL = 'jdbc:postgresql://localhost:5433/mobifix'
+$env:DB_USERNAME = 'mobifix'
+$env:DB_PASSWORD = 'mobfix_dev'
+$env:APP_MOCK_FIREBASE_ID = '550e8400-e29b-41d4-a716-446655440101'
+.\mvnw.cmd spring-boot:run
+```
+
+As variáveis valem para esse terminal e seus processos. No IntelliJ, configure-as na configuração de execução. Para voltar ao valor do arquivo após parar a API, remova a variável correspondente, por exemplo `Remove-Item Env:APP_MOCK_FIREBASE_ID`, e reinicie.
+
+## Mock do Firebase: funcionamento atual
+
+**A autenticação Firebase ainda não está implementada na API.** Não é necessário fazer login, enviar um Bearer token ou configurar credenciais Firebase para executar esta versão. A presença da dependência `firebase-admin` não ativa a autenticação.
+
+Em `src/main/resources/application.yaml`, a propriedade abaixo simula a identidade do usuário autenticado:
+
+```yaml
+app:
+  mock:
+    firebase-id: "550e8400-e29b-41d4-a716-446655440101"
+```
+
+Os controllers de usuários, veículos, perfil profissional e gerenciamento da agenda utilizam esse mesmo valor. Todas as requisições de gerenciamento da mesma instância da API atuam como a mesma identidade, independentemente de quem as enviou. Um header ou um campo `firebaseId` no corpo não troca o usuário atual.
+
+O mock exige um UUID válido porque a configuração é recebida como `UUID` pelos controllers. Isso é uma restrição temporária da implementação: o UID real do Firebase não precisa ter formato UUID.
+
+O identificador simulado é persistido em `usuario.firebase_id`. Ele é diferente do `id` interno do usuário, gerado pela API. Também não deve ser confundido com o ID do perfil profissional usado nas consultas públicas de prestadores.
+
+### Testar como cliente
+
+1. Configure o mock com `550e8400-e29b-41d4-a716-446655440101` e inicie a API.
+2. No Swagger, execute `POST /api/v1/usuarios` com o corpo:
+
+```json
+{
+  "nome": "Ana",
+  "sobrenome": "Silva",
+  "email": "ana.cliente@example.com",
+  "telefone": "81999990001",
+  "uf": "PE",
+  "tipo": "CLIENTE"
+}
+```
+
+3. Execute `GET /api/v1/usuarios/me` e confirme a conta criada.
+4. Utilize as operações de veículos. O proprietário será o cliente associado ao mock; não é informado livremente no corpo.
+
+A conta não é criada apenas por configurar o mock. Se ela ainda não existir, a consulta `/usuarios/me` retorna 404. Se já estiver cadastrada, utilize a consulta em vez de repetir o cadastro: a identidade e o e-mail não podem ser duplicados.
+
+### Testar como prestador
+
+1. Pare a aplicação.
+2. No terminal em que irá iniciá-la, escolha outra identidade:
+
+```powershell
+$env:APP_MOCK_FIREBASE_ID = '550e8400-e29b-41d4-a716-446655440102'
+.\mvnw.cmd spring-boot:run
+```
+
+3. Execute `POST /api/v1/usuarios` com outro e-mail e `tipo: PRESTADOR`:
+
+```json
+{
+  "nome": "Carlos",
+  "sobrenome": "Santos",
+  "email": "carlos.prestador@example.com",
+  "telefone": "81999990002",
+  "uf": "PE",
+  "tipo": "PRESTADOR"
+}
+```
+
+4. Cadastre o perfil profissional por `POST /api/v1/prestadores/me/perfil`, seguindo os campos e exemplos do Swagger. Consulte os catálogos para informar IDs existentes de tipos de veículo e especialidades.
+5. Utilize as operações de gerenciamento da agenda com essa identidade.
+
+Uma conta possui apenas um tipo nesta versão: cliente ou prestador. Para voltar ao cliente, pare a API, restaure o UUID do cliente e reinicie. Trocar o mock seleciona outra conta; não altera nem apaga os dados da conta anterior. O tipo da conta não é alterado pela edição do usuário.
+
+As consultas públicas de prestadores e disponibilidade não dependem da identidade simulada. Nas operações de gerenciamento, as regras de tipo, conta ativa e propriedade dos recursos continuam sendo aplicadas. O mock não oferece autenticação real e deve ficar restrito ao desenvolvimento e aos testes controlados.
+
+## JSON e HATEOAS
+
+Sem preferência de formato, ou com `Accept: application/json`, a API retorna o JSON convencional. Para receber links HATEOAS e coleções HAL, envie `Accept: application/hal+json`:
+
+```powershell
+Invoke-RestMethod `
+  'http://localhost:8080/api/v1/tipos-veiculo' `
+  -Headers @{ Accept = 'application/hal+json' } |
+  ConvertTo-Json -Depth 10
+```
+
+Consulte [Swagger e HATEOAS](docs/swagger-hateoas.md) para detalhes sobre links, paginação e testes manuais.
+
+## Problemas frequentes
+
+- **Classe compilada com versão mais recente / source 8:** confira o JDK usado pelo terminal, Maven e IntelliJ. O projeto requer Java 25.
+- **Erro de injector do Maven no IntelliJ:** configure a instalação local do Maven 3.9.11 e o JDK 25 nas opções de Maven da IDE; essa combinação foi utilizada na validação.
+- **Conexão recusada no banco:** confira `docker compose ps` e a porta 5433 na URL JDBC.
+- **Falha de senha no PostgreSQL:** confira a senha configurada e lembre que um volume existente mantém as credenciais com que foi inicializado. Não remova o volume se precisar preservar os dados.
+- **Usuário não encontrado em `/me`:** confira o mock efetivo, reinicie após alterar a configuração e cadastre a conta correspondente.
+- **Cadastro duplicado:** utilize o cadastro existente ou escolha outro UUID e outro e-mail para uma nova conta.
