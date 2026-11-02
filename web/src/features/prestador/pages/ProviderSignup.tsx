@@ -8,13 +8,11 @@ import { Alert } from "@/shared/components/Alert";
 import { AuthPage } from "@/shared/components/AuthCard";
 import { BrandLogo } from "@/shared/components/BrandLogo";
 import { Button } from "@/shared/components/Button";
-import { getErrorMessage } from "@/shared/utils/firebaseErrors";
-import { EmailVerificationStep } from "@/features/auth/components/EmailVerificationStep";
+import { getErrorCode, getErrorMessage } from "@/shared/utils/firebaseErrors";
 import { GuestOnly } from "@/features/auth/components/RouteGuards";
 import { RegistrationSuccess } from "@/features/auth/components/RegistrationSuccess";
 import { RoleTabs } from "@/features/auth/components/RoleTabs";
-import type { ApiSyncResult } from "@/features/auth/services/apiRegistration";
-import { EmailVerificationError, requestVerificationCode } from "@/features/auth/services/emailVerificationService";
+import { VerifyEmailPanel } from "@/features/auth/components/VerifyEmailPanel";
 import { INITIAL_PROVIDER_VALUES, PROVIDER_STEPS, type ProviderFormValues } from "../models/registration";
 import { validateProviderStep, type ProviderErrors } from "../forms/providerValidation";
 import { ProviderStepper } from "../forms/ProviderStepper";
@@ -44,20 +42,18 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [resendSeconds, setResendSeconds] = useState(60);
-  const [done, setDone] = useState<ApiSyncResult | null>(null);
+  const [sendFailed, setSendFailed] = useState(false);
+  const [done, setDone] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  /** Último e-mail para o qual um código foi enviado (evita novo envio ao voltar e avançar sem mudar o e-mail). */
-  const sent = useRef<{ email: string; at: number; resendSeconds: number } | null>(null);
   const goToDashboard = useCallback(() => router.replace(routes.providerHome), [router]);
 
   const step = PROVIDER_STEPS[stepIndex];
-  /** Último passo do formulário: ao avançar daqui o código é enviado e a verificação começa. */
+  /** Último passo do formulário: ao avançar daqui a conta é criada, o link é enviado e a verificação começa. */
   const isLastFormStep = step.id === "confirmation";
 
   // Move o foco para o título ao trocar de etapa (leitores de tela e navegação por teclado).
   useEffect(() => {
-    // Na verificação o foco vai para o campo do código (EmailVerificationStep), não para o título.
+    // Na verificação o foco fica no painel (VerifyEmailPanel), não no título.
     if (PROVIDER_STEPS[stepIndex].id !== "verification") headingRef.current?.focus();
   }, [stepIndex]);
 
@@ -92,7 +88,7 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
       return;
     }
 
-    // Revalida tudo antes de pedir o código (defesa contra estados inconsistentes).
+    // Revalida tudo antes de criar a conta (defesa contra estados inconsistentes).
     const formSteps = PROVIDER_STEPS.filter((item) => item.id !== "verification");
     for (let index = 0; index < formSteps.length - 1; index++) {
       const stepErrors = validateProviderStep(formSteps[index].id, values);
@@ -104,46 +100,33 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
       }
     }
 
-    const email = values.email.trim().toLowerCase();
-    const previous = sent.current;
-    if (previous && previous.email === email) {
-      const elapsed = Math.floor((Date.now() - previous.at) / 1000);
-      setResendSeconds(Math.max(0, previous.resendSeconds - elapsed));
-      setStepIndex((index) => index + 1);
-      return;
-    }
-
     setLoading(true);
+    // Impede que o GuestOnly redirecione enquanto a conta, os documentos e o perfil estão sendo criados.
+    onHold(true);
     try {
-      const result = await requestVerificationCode(email);
-      sent.current = { email, at: Date.now(), resendSeconds: result.resendAfterSeconds };
-      setResendSeconds(result.resendAfterSeconds);
+      const result = await registerProvider(values);
+      setSendFailed(!result.verificationEmailSent);
       setStepIndex((index) => index + 1);
     } catch (error) {
-      if (error instanceof EmailVerificationError && error.code === "email_in_use") {
+      onHold(false);
+      if (getErrorCode(error) === "auth/email-already-in-use") {
         // Leva o usuário ao campo de e-mail (passo 1) com a mensagem no próprio campo.
         setStepIndex(0);
-        setErrors({ email: error.message });
+        setErrors({ email: getErrorMessage(error) });
         setFormError("Este e-mail já está cadastrado.");
       } else {
-        setFormError(error instanceof EmailVerificationError ? error.message : getErrorMessage(error));
+        setFormError(getErrorMessage(error));
       }
     } finally {
       setLoading(false);
     }
   }
 
-  /** Com o e-mail verificado: cria a conta, envia documentos, grava o perfil e cadastra na API. */
-  async function finalize(verificationToken: string) {
-    onHold(true);
-    try {
-      const result = await registerProvider(values, verificationToken);
-      setDone(result.api);
-    } catch (error) {
-      onHold(false);
-      throw error;
-    }
-  }
+  const handleVerified = useCallback(() => setDone(true), []);
+  const handleLeave = useCallback(() => {
+    onHold(false);
+    setStepIndex(0);
+  }, [onHold]);
 
   if (done) {
     return (
@@ -151,7 +134,6 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
         <RegistrationSuccess
           title="Cadastro enviado!"
           message="Seu e-mail foi verificado e seu cadastro de prestador foi criado. Nossa equipe vai analisar seus documentos."
-          api={done}
           onContinue={goToDashboard}
           continueLabel="Ir para o painel"
         />
@@ -177,13 +159,7 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
           <h2 ref={headingRef} tabIndex={-1} className="mb-5 text-sm font-bold text-orange-500 outline-none">
             {STEP_TITLES[step.id]}
           </h2>
-          <EmailVerificationStep
-            email={values.email.trim().toLowerCase()}
-            initialResendSeconds={resendSeconds}
-            onVerified={finalize}
-            onBack={goBack}
-            backLabel="Voltar e revisar dados"
-          />
+          <VerifyEmailPanel onVerified={handleVerified} onLeave={handleLeave} initialSendFailed={sendFailed} />
         </div>
       ) : (
       <form onSubmit={handleSubmit} noValidate>
@@ -213,8 +189,8 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
               Voltar
             </Button>
           )}
-          <Button type="submit" loading={loading} loadingLabel={isLastFormStep ? "Enviando código..." : "Aguarde..."} className="sm:w-auto">
-            {isLastFormStep ? "Enviar código de verificação" : "Próximo Passo"}
+          <Button type="submit" loading={loading} loadingLabel={isLastFormStep ? "Criando conta..." : "Aguarde..."} className="sm:w-auto">
+            {isLastFormStep ? "Criar conta e verificar e-mail" : "Próximo Passo"}
           </Button>
         </div>
       </form>
