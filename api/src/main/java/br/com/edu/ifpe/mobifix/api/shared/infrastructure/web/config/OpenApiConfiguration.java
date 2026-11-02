@@ -20,8 +20,9 @@ public class OpenApiConfiguration {
     @Bean
     public OpenAPI mobifixOpenApi() {
         return new OpenAPI().info(new Info().title("MobiFix API").version("v1").description("""
-                API de serviços automotivos. A identidade atual é simulada pela configuração app.mock.firebase-id;
-                não existe autenticação Firebase ativa nesta versão. Cada operação de gerenciamento usa a conta desse mock.
+                API de serviços automotivos. Faça login pelo Firebase no cliente e envie o ID token em Authorization: Bearer <token>.
+                As operações protegidas usam o UID validado do token; não envie o identificador pelo corpo.
+                No botão Authorize, informe somente o ID token, sem o prefixo Bearer. Consultas públicas não exigem login.
 
                 application/json mantém o contrato original. Solicite Accept: application/hal+json para receber links em _links
                 e coleções em _embedded. Em HAL, editar usa PUT e desativar usa DELETE; seguir apenas um href como GET não executa essas ações.
@@ -31,8 +32,8 @@ public class OpenApiConfiguration {
                 IDs de exemplos são ilustrativos: consulte os catálogos e utilize os identificadores do seu banco.
                 """)).tags(List.of(
                 new Tag().name("Catálogos").description("Tipos de veículos e especialidades disponíveis para seleção."),
-                new Tag().name("Usuários").description("Cadastro, consulta, edição e desativação da conta do mock."),
-                new Tag().name("Veículos").description("Veículos ativos pertencentes ao cliente do mock."),
+                new Tag().name("Usuários").description("Cadastro, consulta, edição e desativação da conta autenticada."),
+                new Tag().name("Veículos").description("Veículos ativos pertencentes ao cliente autenticado."),
                 new Tag().name("Perfil profissional").description("Gerenciamento do próprio perfil de prestador."),
                 new Tag().name("Busca de prestadores").description("Busca e consulta pública, sem dados pessoais privados."),
                 new Tag().name("Agenda").description("Horários, capacidade e disponibilidade pública dos prestadores.")));
@@ -42,6 +43,8 @@ public class OpenApiConfiguration {
     public OpenApiCustomizer documentarContratos() {
         return api -> {
             if (api.getComponents() == null) api.setComponents(new Components());
+            api.getComponents().addSecuritySchemes("firebaseBearer", new io.swagger.v3.oas.models.security.SecurityScheme()
+                    .type(io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("Firebase ID Token"));
             api.getComponents().addSchemas("LinksHal", new ObjectSchema().additionalProperties(
                     new ObjectSchema().addProperty("href", new StringSchema().format("uri")).addProperty("templated", new BooleanSchema())));
             api.getComponents().addSchemas("ErroApi", new ObjectSchema()
@@ -55,6 +58,17 @@ public class OpenApiConfiguration {
             if (api.getPaths() == null) return;
             api.getPaths().forEach((path, item) -> item.readOperationsMap().forEach((method, operation) -> {
                 if (!path.startsWith("/api/v1/")) return;
+                boolean protegida = !(method == PathItem.HttpMethod.GET &&
+                        (path.equals("/api/v1/tipos-veiculo") || path.equals("/api/v1/especialidades")
+                        || path.equals("/api/v1/prestadores") || path.equals("/api/v1/prestadores/{id}")
+                        || path.equals("/api/v1/prestadores/{prestadorId}/horarios")));
+                if (protegida) {
+                    operation.addSecurityItem(new io.swagger.v3.oas.models.security.SecurityRequirement().addList("firebaseBearer"));
+                    operation.getResponses().addApiResponse("401", new ApiResponse().description("ID token ausente, inválido, expirado ou revogado.")
+                            .content(new Content().addMediaType(PROBLEM, new MediaType().schema(new Schema<>().$ref("#/components/schemas/ErroApi")))));
+                    operation.getResponses().addApiResponse("503", new ApiResponse().description("Serviço de autenticação indisponível.")
+                            .content(new Content().addMediaType(PROBLEM, new MediaType().schema(new Schema<>().$ref("#/components/schemas/ErroApi")))));
+                }
                 operation.setTags(List.of(tag(path)));
                 operation.setSummary(resumo(path, method));
                 operation.setDescription(descricao(path, method));
@@ -133,8 +147,8 @@ public class OpenApiConfiguration {
         if (path.contains("tipos-veiculo") || path.contains("especialidades")) return base + "Lista de opções previamente cadastradas pelo sistema. Utilize os IDs retornados nos cadastros de veículos e perfis profissionais. Não existem operações públicas de alteração dos catálogos nesta versão.";
         if (path.equals("/api/v1/prestadores")) return base + "Todos os filtros fornecidos são combinados com AND. Cidade é comparada sem diferenciar maiúsculas de minúsculas. Somente contas ativas do tipo PRESTADOR com perfil aparecem. A ordenação usa nome fantasia e ID. Catálogo inexistente retorna lista vazia. Em HAL, os links preservam os filtros.";
         if (path.contains("horarios")) return base + "Datas inclusivas em ISO-8601; período máximo de 366 dias. Sem datas, consulta de hoje até os próximos 30 dias. Fuso America/Sao_Paulo. A consulta pública mostra apenas horários futuros, abertos e com vagas. A criação manual permite fins de semana e horários fora do padrão mensal. PUT altera somente capacidade e bloqueio. Ainda não há reservas: vagas disponíveis correspondem à capacidade. A geração mensal acontece no dia 1 às 00:05, na inicialização e após cadastro confirmado do prestador, sem sobrescrever ajustes manuais.";
-        if (path.contains("usuarios")) return base + "Usa a identidade configurada no mock. PUT altera apenas nome, sobrenome, telefone e UF; preserva IDs, e-mail e tipo. DELETE desativa sem excluir vínculos e pode ser repetido. GET /me permanece disponível para contas desativadas. Não há reativação nesta versão.";
-        if (path.contains("veiculos")) return base + "Exige cliente ativo. O proprietário vem do mock e não pode ser escolhido pelo corpo. Veículo inexistente, desativado ou de outra conta retorna 404. DELETE é lógico. Placa brasileira é opcional; formatos antigo e Mercosul são aceitos. Ano permitido de 1886 até o ano seguinte ao atual.";
+        if (path.contains("usuarios")) return base + "Usa o UID Firebase validado do token. PUT altera apenas nome, sobrenome, telefone e UF; preserva IDs, e-mail e tipo. DELETE desativa sem excluir vínculos e pode ser repetido. GET /me permanece disponível para contas desativadas. Não há reativação nesta versão.";
+        if (path.contains("veiculos")) return base + "Exige cliente ativo. O proprietário vem da identidade autenticada e não pode ser escolhido pelo corpo. Veículo inexistente, desativado ou de outra conta retorna 404. DELETE é lógico. Placa brasileira é opcional; formatos antigo e Mercosul são aceitos. Ano permitido de 1886 até o ano seguinte ao atual.";
         if (path.contains("/me/perfil")) return base + "Exige conta ativa do tipo PRESTADOR. Seleções de veículos e especialidades são obrigatórias e devem existir. PUT substitui as seleções, preservando os IDs. O cadastro confirmado gera imediatamente a agenda do próximo mês.";
         return base + "Consulta pública. O identificador é o ID do perfil profissional. Não expõe e-mail, telefone, identificador Firebase ou endereço completo. Prestador inexistente ou inativo retorna 404.";
     }

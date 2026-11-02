@@ -4,7 +4,6 @@ import br.com.edu.ifpe.mobifix.api.shared.infrastructure.web.hal.ApiHalAssembler
 import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.hateoas.EntityModel;
 
-import java.util.UUID;
 import br.com.edu.ifpe.mobifix.api.prestador.application.useCase.atualizarPerfilPrestador.AtualizarPerfilPrestador;
 import br.com.edu.ifpe.mobifix.api.prestador.application.useCase.atualizarPerfilPrestador.AtualizarPerfilPrestadorCommand;
 import br.com.edu.ifpe.mobifix.api.prestador.infrastructure.web.dto.AtualizarPerfilPrestadorRequest;
@@ -20,7 +19,7 @@ import br.com.edu.ifpe.mobifix.api.prestador.infrastructure.web.dto.PerfilPresta
 
 import jakarta.validation.Valid;
 
-import org.springframework.beans.factory.annotation.Value;
+import br.com.edu.ifpe.mobifix.api.shared.infrastructure.security.IdentidadeAtual;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,15 +32,15 @@ public class PrestadorController {
 
     private final CriarPerfilPrestador criarPerfilPrestador;
     private final ConsultarPerfilPrestadorAtual consultarPerfilPrestadorAtual;
-    private final UUID firebaseIdMock;
+    private final IdentidadeAtual identidadeAtual;
     private final AtualizarPerfilPrestador atualizarPerfilPrestador;
 
-    public PrestadorController(CriarPerfilPrestador criarPerfilPrestador, ConsultarPerfilPrestadorAtual consultarPerfilPrestadorAtual, AtualizarPerfilPrestador atualizarPerfilPrestador, @Value("${app.mock.firebase-id}") UUID firebaseIdeMock, ApiHalAssembler hal) {
+    public PrestadorController(CriarPerfilPrestador criarPerfilPrestador, ConsultarPerfilPrestadorAtual consultarPerfilPrestadorAtual, AtualizarPerfilPrestador atualizarPerfilPrestador, IdentidadeAtual identidadeAtual, ApiHalAssembler hal) {
         this.hal = hal;
         this.criarPerfilPrestador = criarPerfilPrestador;
         this.atualizarPerfilPrestador = atualizarPerfilPrestador;
         this.consultarPerfilPrestadorAtual = consultarPerfilPrestadorAtual;
-        this.firebaseIdMock = firebaseIdeMock;
+        this.identidadeAtual = identidadeAtual;
     }
 
     @PostMapping
@@ -67,7 +66,7 @@ public class PrestadorController {
                         request.especialidadeIds()
                 );
 
-        PerfilPrestador perfil = criarPerfilPrestador.executar(firebaseIdMock.toString(), command);
+        PerfilPrestador perfil = criarPerfilPrestador.executar(identidadeAtual.firebaseId(), command);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(perfil));
     }
@@ -83,11 +82,11 @@ public class PrestadorController {
                 request.nomeFantasia(), request.descricao(), endereco,
                 request.tiposVeiculoIds(), request.especialidadeIds()
         );
-        return toResponse(atualizarPerfilPrestador.executar(firebaseIdMock.toString(), command));
+        return toResponse(atualizarPerfilPrestador.executar(identidadeAtual.firebaseId(), command));
     }
     @GetMapping
     public PerfilPrestadorResponse consultarAtual() {
-        PerfilPrestador perfil = consultarPerfilPrestadorAtual.executar(firebaseIdMock.toString());
+        PerfilPrestador perfil = consultarPerfilPrestadorAtual.executar(identidadeAtual.firebaseId());
 
         return toResponse(perfil);
     }

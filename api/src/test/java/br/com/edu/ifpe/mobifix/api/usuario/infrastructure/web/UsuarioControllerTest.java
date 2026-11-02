@@ -31,7 +31,7 @@ class UsuarioControllerTest {
             """;
     @BeforeEach
     void configurar() {
-        mvc = MockMvcBuilders.standaloneSetup(new UsuarioController(criar, consultar, atualizar, desativar, identidade, null))
+        mvc = MockMvcBuilders.standaloneSetup(new UsuarioController(criar, consultar, atualizar, desativar, () -> identidade.toString(), null))
                 .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/").accept(org.springframework.http.MediaType.APPLICATION_JSON)).setControllerAdvice(new UsuarioExceptionHandler()).build();
     }
     @Test

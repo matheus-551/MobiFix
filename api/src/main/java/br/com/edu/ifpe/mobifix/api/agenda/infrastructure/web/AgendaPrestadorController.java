@@ -12,7 +12,7 @@ import br.com.edu.ifpe.mobifix.api.agenda.application.*;
 import br.com.edu.ifpe.mobifix.api.agenda.domain.model.HorarioAtendimento;
 import br.com.edu.ifpe.mobifix.api.agenda.infrastructure.web.dto.*;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
+import br.com.edu.ifpe.mobifix.api.shared.infrastructure.security.IdentidadeAtual;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,22 +21,22 @@ import org.springframework.web.bind.annotation.*;
 public class AgendaPrestadorController {
     private final ApiHalAssembler hal;
     private final GerenciarAgenda agenda;
-    private final UUID firebaseId;
-    public AgendaPrestadorController(GerenciarAgenda agenda, @Value("${app.mock.firebase-id}") UUID firebaseId, ApiHalAssembler hal) {
+    private final IdentidadeAtual identidadeAtual;
+    public AgendaPrestadorController(GerenciarAgenda agenda, IdentidadeAtual identidadeAtual, ApiHalAssembler hal) {
         this.hal = hal;
-        this.agenda = agenda; this.firebaseId = firebaseId;
+        this.agenda = agenda; this.identidadeAtual = identidadeAtual;
     }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
     public HorarioResponse criar(@Valid @RequestBody CriarHorarioRequest request) {
-        return toResponse(agenda.criar(firebaseId.toString(), new CriarHorarioCommand(request.data(), request.horaInicio(), request.capacidadeTotal())));
+        return toResponse(agenda.criar(identidadeAtual.firebaseId(), new CriarHorarioCommand(request.data(), request.horaInicio(), request.capacidadeTotal())));
     }
     @GetMapping
     public List<HorarioResponse> listar(@RequestParam(required = false) LocalDate inicio, @RequestParam(required = false) LocalDate fim) {
-        return agenda.listarMeus(firebaseId.toString(), inicio, fim).stream().map(this::toResponse).toList();
+        return agenda.listarMeus(identidadeAtual.firebaseId(), inicio, fim).stream().map(this::toResponse).toList();
     }
     @PutMapping("/{id}")
     public HorarioResponse atualizar(@PathVariable UUID id, @Valid @RequestBody AtualizarHorarioRequest request) {
-        return toResponse(agenda.atualizar(firebaseId.toString(), id, new AtualizarHorarioCommand(request.capacidadeTotal(), request.bloqueado())));
+        return toResponse(agenda.atualizar(identidadeAtual.firebaseId(), id, new AtualizarHorarioCommand(request.capacidadeTotal(), request.bloqueado())));
     }
     private HorarioResponse toResponse(HorarioAtendimento horario) {
         return new HorarioResponse(horario.id(), horario.prestadorId(), horario.data(), horario.horaInicio(), horario.capacidadeTotal(), horario.bloqueado());
