@@ -23,7 +23,7 @@ class AgendaControllerTest {
     private MockMvc mvc;
     @BeforeEach
     void configurar() {
-        mvc = MockMvcBuilders.standaloneSetup(new AgendaPrestadorController(agenda, identidade, null), new AgendaPublicaController(agenda, null))
+        mvc = MockMvcBuilders.standaloneSetup(new AgendaPrestadorController(agenda, () -> identidade.toString(), null), new AgendaPublicaController(agenda, null))
                 .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/").accept(org.springframework.http.MediaType.APPLICATION_JSON)).setControllerAdvice(new AgendaExceptionHandler()).build();
     }
     @Test

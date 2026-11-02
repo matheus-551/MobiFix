@@ -20,5 +20,7 @@ logging:
     org.hibernate.SQL: DEBUG
 
 app:
-  mock:
-    firebase-id: "550e8400-e29b-41d4-a716-446655440101"
+  firebase:
+    project-id: ${FIREBASE_PROJECT_ID:}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:8081}

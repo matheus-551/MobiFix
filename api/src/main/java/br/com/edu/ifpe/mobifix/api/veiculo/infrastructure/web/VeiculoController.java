@@ -15,7 +15,7 @@ import br.com.edu.ifpe.mobifix.api.veiculo.domain.model.Veiculo;
 import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web.dto.CriarVeiculoRequest;
 import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.web.dto.VeiculoResponse;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
+import br.com.edu.ifpe.mobifix.api.shared.infrastructure.security.IdentidadeAtual;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,37 +24,37 @@ import org.springframework.web.bind.annotation.*;
 public class VeiculoController {
     private final ApiHalAssembler hal;
     private final VeiculosDoCliente veiculos;
-    private final UUID firebaseIdMock;
-    public VeiculoController(VeiculosDoCliente veiculos, @Value("${app.mock.firebase-id}") UUID firebaseIdMock, ApiHalAssembler hal) {
+    private final IdentidadeAtual identidadeAtual;
+    public VeiculoController(VeiculosDoCliente veiculos, IdentidadeAtual identidadeAtual, ApiHalAssembler hal) {
         this.hal = hal;
         this.veiculos = veiculos;
-        this.firebaseIdMock = firebaseIdMock;
+        this.identidadeAtual = identidadeAtual;
     }
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public VeiculoResponse criar(@Valid @RequestBody CriarVeiculoRequest request) {
-        return toResponse(veiculos.criar(firebaseIdMock.toString(), new CriarVeiculoCommand(
+        return toResponse(veiculos.criar(identidadeAtual.firebaseId(), new CriarVeiculoCommand(
                 request.tipoVeiculoId(), request.marca(), request.modelo(), request.ano(), request.placa())));
     }
     @GetMapping("/me")
     public List<VeiculoResponse> listarMeus() {
-        return veiculos.listar(firebaseIdMock.toString()).stream().map(this::toResponse).toList();
+        return veiculos.listar(identidadeAtual.firebaseId()).stream().map(this::toResponse).toList();
     }
     @GetMapping("/{id}")
     public VeiculoResponse consultar(@PathVariable UUID id) {
-        return toResponse(veiculos.consultar(firebaseIdMock.toString(), id));
+        return toResponse(veiculos.consultar(identidadeAtual.firebaseId(), id));
     }
 
     @PutMapping("/{id}")
     public VeiculoResponse atualizar(@PathVariable UUID id, @Valid @RequestBody AtualizarVeiculoRequest request) {
-        return toResponse(veiculos.atualizar(firebaseIdMock.toString(), id, new AtualizarVeiculoCommand(
+        return toResponse(veiculos.atualizar(identidadeAtual.firebaseId(), id, new AtualizarVeiculoCommand(
                 request.tipoVeiculoId(), request.marca(), request.modelo(), request.ano(), request.placa())));
     }
 
     @DeleteMapping(value = "/{id}", produces = {"application/json", "application/hal+json"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void desativar(@PathVariable UUID id) {
-        veiculos.desativar(firebaseIdMock.toString(), id);
+        veiculos.desativar(identidadeAtual.firebaseId(), id);
     }
     private VeiculoResponse toResponse(Veiculo veiculo) {
         return new VeiculoResponse(veiculo.id(), veiculo.clienteId(), veiculo.tipoVeiculoId(),

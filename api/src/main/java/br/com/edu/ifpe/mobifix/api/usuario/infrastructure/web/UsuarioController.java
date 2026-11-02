@@ -4,7 +4,6 @@ import br.com.edu.ifpe.mobifix.api.shared.infrastructure.web.hal.ApiHalAssembler
 import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.hateoas.EntityModel;
 
-import java.util.UUID;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.atualizarUsuarioAtual.AtualizarUsuarioAtual;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.atualizarUsuarioAtual.AtualizarUsuarioCommand;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.desativarUsuarioAtual.DesativarUsuarioAtual;
@@ -19,7 +18,7 @@ import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.web.dto.UsuarioRespons
 
 import jakarta.validation.Valid;
 
-import org.springframework.beans.factory.annotation.Value;
+import br.com.edu.ifpe.mobifix.api.shared.infrastructure.security.IdentidadeAtual;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,17 +30,17 @@ public class UsuarioController {
 
     private final CriarUsuario criarUsuario;
     private final ConsultarUsuarioAtual consultarUsuarioAtual;
-    private final UUID firebaseIdMock;
+    private final IdentidadeAtual identidadeAtual;
     private final AtualizarUsuarioAtual atualizarUsuarioAtual;
     private final DesativarUsuarioAtual desativarUsuarioAtual;
 
-    public UsuarioController(CriarUsuario criarUsuario, ConsultarUsuarioAtual consultarUsuarioAtual, AtualizarUsuarioAtual atualizarUsuarioAtual, DesativarUsuarioAtual desativarUsuarioAtual, @Value("${app.mock.firebase-id}") UUID firebaseIdMock, ApiHalAssembler hal) {
+    public UsuarioController(CriarUsuario criarUsuario, ConsultarUsuarioAtual consultarUsuarioAtual, AtualizarUsuarioAtual atualizarUsuarioAtual, DesativarUsuarioAtual desativarUsuarioAtual, IdentidadeAtual identidadeAtual, ApiHalAssembler hal) {
         this.hal = hal;
         this.criarUsuario = criarUsuario;
         this.atualizarUsuarioAtual = atualizarUsuarioAtual;
         this.desativarUsuarioAtual = desativarUsuarioAtual;
         this.consultarUsuarioAtual = consultarUsuarioAtual;
-        this.firebaseIdMock = firebaseIdMock;
+        this.identidadeAtual = identidadeAtual;
     }
 
     @PostMapping
@@ -55,7 +54,7 @@ public class UsuarioController {
                 request.tipo()
         );
 
-        Usuario usuario = criarUsuario.executar(firebaseIdMock.toString(), command);
+        Usuario usuario = criarUsuario.executar(identidadeAtual.firebaseId(), command);
 
         UsuarioResponse response = toResponse(usuario);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -64,7 +63,7 @@ public class UsuarioController {
     @GetMapping("/me")
     public UsuarioResponse consultarAtual() {
         Usuario usuario = consultarUsuarioAtual.executar(
-                firebaseIdMock.toString()
+                identidadeAtual.firebaseId()
         );
 
         return toResponse(usuario);
@@ -72,7 +71,7 @@ public class UsuarioController {
 
     @PutMapping("/me")
     public UsuarioResponse atualizarAtual(@Valid @RequestBody AtualizarUsuarioRequest request) {
-        Usuario usuario = atualizarUsuarioAtual.executar(firebaseIdMock.toString(), new AtualizarUsuarioCommand(
+        Usuario usuario = atualizarUsuarioAtual.executar(identidadeAtual.firebaseId(), new AtualizarUsuarioCommand(
                 request.nome(), request.sobrenome(), request.telefone(), request.uf()
         ));
         return toResponse(usuario);
@@ -81,7 +80,7 @@ public class UsuarioController {
     @DeleteMapping(value = "/me", produces = {"application/json", "application/hal+json"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void desativarAtual() {
-        desativarUsuarioAtual.executar(firebaseIdMock.toString());
+        desativarUsuarioAtual.executar(identidadeAtual.firebaseId());
     }
     private UsuarioResponse toResponse(Usuario usuario) {
         return new UsuarioResponse(
