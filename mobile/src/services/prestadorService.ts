@@ -1,45 +1,10 @@
-import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { Perfil } from '../types';
-
-/** Perfil público do prestador (guardado em prestadores/{uid}). Não contém dados de contato. */
-export type Prestador = {
-  id: string;
-  nomeExibicao: string;
-  cidade: string;
-  uf: string;
-  tiposVeiculo: string[];
-  especialidades: string[];
-  notaMedia: number;
-  totalAvaliacoes: number;
-};
-
-/**
- * Cria o perfil público do prestador na primeira vez que ele entra com a conta verificada.
- * Assim, só profissionais com e-mail confirmado aparecem na busca.
- */
-export async function garantirPerfilPublico(uid: string, perfil: Perfil): Promise<void> {
-  if (perfil.papel !== 'PRESTADOR') return;
-  try {
-    const ref = doc(db, 'prestadores', uid);
-    if ((await getDoc(ref)).exists()) return;
-    await setDoc(ref, {
-      nomeExibicao: perfil.nomeExibicao ?? '',
-      cidade: perfil.cidade ?? '',
-      uf: perfil.uf,
-      tiposVeiculo: perfil.tiposVeiculo ?? [],
-      especialidades: perfil.especialidades ?? [],
-      notaMedia: 0,
-      totalAvaliacoes: 0,
-      criadoEm: serverTimestamp(),
-    });
-  } catch {
-    // Tenta de novo no próximo acesso.
-  }
-}
-
-/** Lê todos os prestadores. Os filtros são aplicados na tela (suficiente para o volume do projeto). */
-export async function buscarPrestadores(): Promise<Prestador[]> {
-  const snap = await getDocs(collection(db, 'prestadores'));
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Prestador, 'id'>) }));
+import { api } from './api';
+import { Pagina, PrestadorApi } from './contratos';
+export type Prestador = { id: string; nomeExibicao: string; cidade: string; uf: string; tiposVeiculo: string[]; especialidades: string[] };
+export async function buscarPrestadores(filtros: { page: number; tipoVeiculoId?: number; especialidadeId?: number }): Promise<Pagina<Prestador>> {
+  const params = Object.entries({ size: 20, ...filtros }).filter(([, valor]) => valor !== undefined)
+    .map(([chave, valor]) => `${encodeURIComponent(chave)}=${encodeURIComponent(String(valor))}`).join('&');
+  const pagina = await api<Pagina<PrestadorApi>>(`/prestadores?${params}`, { publica: true });
+  return { ...pagina, content: pagina.content.map(item => ({ id: item.id, nomeExibicao: item.nome, cidade: item.cidade, uf: item.uf,
+    tiposVeiculo: item.tiposVeiculo.map(tipo => tipo.nome), especialidades: item.especialidades.map(esp => esp.nome) })) };
 }

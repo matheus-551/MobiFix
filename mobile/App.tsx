@@ -7,7 +7,8 @@ import { auth } from './src/config/firebase';
 import CadastroScreen from './src/screens/CadastroScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RecuperarSenhaScreen from './src/screens/RecuperarSenhaScreen';
-import PrincipalScreen from './src/screens/PrincipalScreen';
+import SessaoScreen from './src/screens/SessaoScreen';
+import { aguardarCadastro } from './src/services/authService';
 import VerificarEmailScreen from './src/screens/VerificarEmailScreen';
 import { colors } from './src/theme/colors';
 
@@ -20,7 +21,9 @@ export default function App() {
 
   useEffect(
     () =>
-      onAuthStateChanged(auth, (u) => {
+      onAuthStateChanged(auth, async (u) => {
+        await aguardarCadastro();
+        if (auth.currentUser?.uid !== u?.uid) return;
         setUser(u);
         setVerificado(!!u?.emailVerified);
         setCarregando(false);
@@ -41,7 +44,7 @@ export default function App() {
   if (user && !verificado) {
     conteudo = <VerificarEmailScreen email={user.email ?? ''} onVerificado={() => setVerificado(true)} />;
   } else if (user) {
-    conteudo = <PrincipalScreen uid={user.uid} email={user.email ?? ''} />;
+    conteudo = <SessaoScreen key={user.uid} usuario={user} />;
   } else if (tela === 'cadastro') {
     conteudo = <CadastroScreen onVoltar={() => setTela('login')} />;
   } else if (tela === 'recuperar') {

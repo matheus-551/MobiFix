@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInputInstance, View } from 'react-native';
 import Botao from '../components/Botao';
 import Campo from '../components/Campo';
 import Logo from '../components/Logo';
@@ -18,7 +18,7 @@ export default function LoginScreen({ onCadastro, onEsqueciSenha }: Props) {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
-  const senhaRef = useRef<TextInput>(null);
+  const senhaRef = useRef<TextInputInstance>(null);
 
   async function aoEntrar() {
     if (!emailValido(email)) return setErro('Digite um e-mail válido.');

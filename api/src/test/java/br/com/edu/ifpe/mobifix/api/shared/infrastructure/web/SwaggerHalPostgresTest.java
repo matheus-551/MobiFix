@@ -41,10 +41,15 @@ class SwaggerHalPostgresTest {
     @Autowired TipoVeiculoRepository tipos;
     @Autowired EspecialidadeRepository especialidades;
     @Autowired HorarioAtendimentoRepository horarios;
-    @Value("${app.mock.firebase-id}") String identidade;
+    String identidade = "firebase-uid-integracao";
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    br.com.edu.ifpe.mobifix.api.shared.infrastructure.security.VerificadorTokenFirebase verificador;
     private MockMvc mvc;
     @BeforeEach
-    void configurar() { mvc = MockMvcBuilders.webAppContextSetup(context).build(); }
+    void configurar() { org.mockito.Mockito.when(verificador.verificar("token-integracao")).thenReturn(identidade);
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
+                .defaultRequest(get("/").header("Authorization", "Bearer token-integracao")).build(); }
     private Usuario conta(String firebase, TipoUsuario tipo) {
         return usuarios.salvar(new Usuario(UUID.randomUUID(), firebase, "Ana", "Silva", UUID.randomUUID() + "@example.com", "81999999999", "PE", tipo, true));
     }
@@ -67,7 +72,8 @@ class SwaggerHalPostgresTest {
                 .andExpect(jsonPath("$.paths['/api/v1/usuarios/me'].put.requestBody.content['application/json'].example.nome").value("Maria"))
                 .andExpect(jsonPath("$.paths['/api/v1/usuarios/me'].delete.responses['204'].content").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/v1/prestadores'].get.responses['200'].content['application/hal+json'].schema.properties._embedded.properties.prestadores").exists())
-                .andExpect(jsonPath("$.security").doesNotExist());
+                .andExpect(jsonPath("$.paths['/api/v1/usuarios/me'].get.security[0].firebaseBearer").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/tipos-veiculo'].get.security").doesNotExist());
     }
     @Test
     void catalogosMantemArraysJsonPorPadrao() throws Exception {
@@ -225,5 +231,26 @@ class SwaggerHalPostgresTest {
                 .content("{\"capacidadeTotal\":5,\"bloqueado\":true}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.bloqueado").value(true)).andExpect(jsonPath("$.capacidadeTotal").value(5));
         mvc.perform(get("/api/v1/prestadores/{id}/horarios", perfil.id()).accept(HAL)).andExpect(status().isOk()).andExpect(jsonPath("$._embedded.horarios").isEmpty());
+    }
+
+    @Test
+    void autenticacaoRealNaCadeiaProtegeControllersESegregaContas() throws Exception {
+        var semToken=MockMvcBuilders.webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity()).build();
+        semToken.perform(get("/api/v1/tipos-veiculo")).andExpect(status().isOk());
+        semToken.perform(get("/api/v1/usuarios/me")).andExpect(status().isUnauthorized());
+        semToken.perform(post("/api/v1/usuarios").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        Usuario primeiro=conta(identidade, TipoUsuario.CLIENTE);
+        Usuario outro=conta("uid-outro-cliente", TipoUsuario.CLIENTE);
+        org.mockito.Mockito.when(verificador.verificar("token-outro")).thenReturn(outro.firebaseId());
+        Veiculo veiculo=veiculos.salvar(new Veiculo(UUID.randomUUID(), primeiro.id(), tipos.listarTodos().getFirst().id(), "Fiat", "Uno", 2020, null));
+        semToken.perform(get("/api/v1/usuarios/me").header("Authorization", "Bearer token-outro"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(outro.id().toString()));
+        semToken.perform(get("/api/v1/veiculos/{id}",veiculo.id()).header("Authorization", "Bearer token-outro"))
+                .andExpect(status().isNotFound());
+        semToken.perform(get("/api/v1/veiculos/{id}",veiculo.id()).header("Authorization", "Bearer token-integracao"))
+                .andExpect(status().isOk());
+        semToken.perform(get("/api/v1/usuarios/me")).andExpect(status().isUnauthorized());
     }
 }

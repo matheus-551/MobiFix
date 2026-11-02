@@ -8,14 +8,12 @@ type Props = { prestador: Prestador; onPress: () => void };
 
 export default function CartaoPrestador({ prestador: p, onPress }: Props) {
   const local = [p.cidade, p.uf].filter(Boolean).join(' - ');
-  const nota = p.totalAvaliacoes > 0 ? `★ ${p.notaMedia.toFixed(1)} (${p.totalAvaliacoes})` : 'Sem avaliações';
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Ver ${p.nomeExibicao}`}>
       <Card>
         <View style={styles.foto} />
         <View style={styles.linha}>
           <Text style={styles.nome} numberOfLines={1}>{p.nomeExibicao}</Text>
-          <Text style={styles.nota}>{nota}</Text>
         </View>
         {local !== '' && <Text style={styles.info}>{local}</Text>}
         {p.tiposVeiculo.length > 0 && <Text style={styles.info}>Atende: {p.tiposVeiculo.join(', ')}</Text>}

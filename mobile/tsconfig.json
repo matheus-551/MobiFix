@@ -2,5 +2,17 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  "include": [
+    "index.ts",
+    "App.tsx",
+    "src/screens/**/*.tsx",
+    "src/services/**/*.ts",
+    "src/config/**/*.ts",
+    "src/types.ts",
+    "src/constants/catalogo.ts",
+    "src/theme/**/*.ts",
+    "src/utils/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

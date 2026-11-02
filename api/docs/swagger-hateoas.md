@@ -4,7 +4,7 @@
 
 - Swagger UI: `/swagger-ui/index.html`.
 - OpenAPI JSON: `/v3/api-docs`.
-- A API ainda usa a identidade de `app.mock.firebase-id`. Nao existe autenticacao Firebase ativa nesta etapa.
+- Rotas de gerenciamento exigem ID token Firebase no header `Authorization: Bearer <token>`. No Swagger, clique em **Authorize** e informe apenas o token. Consulte o [README](../README.md#autenticação-firebase) para configurar as credenciais.
 - Os IDs dos exemplos sao ilustrativos. Consulte os catalogos antes de cadastrar os recursos.
 
 ## Negociacao de conteudo

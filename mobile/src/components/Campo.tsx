@@ -1,8 +1,8 @@
 import React, { forwardRef } from 'react';
-import { StyleSheet, TextInput, TextInputProps } from 'react-native';
+import { StyleSheet, TextInput, TextInputProps, TextInputInstance } from 'react-native';
 import { colors } from '../theme/colors';
 
-const Campo = forwardRef<TextInput, TextInputProps>((props, ref) => (
+const Campo = forwardRef<TextInputInstance, TextInputProps>((props, ref) => (
   <TextInput
     ref={ref}
     placeholderTextColor={colors.muted}
@@ -11,6 +11,7 @@ const Campo = forwardRef<TextInput, TextInputProps>((props, ref) => (
     style={[styles.input, props.style]}
   />
 ));
+Campo.displayName = 'Campo';
 export default Campo;
 
 const styles = StyleSheet.create({
