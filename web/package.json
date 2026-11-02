@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:server": "tsc -p tsconfig.test.json && node --test .test-build/emailVerification/service.test.js .test-build/google/adapters.test.js .test-build/emailVerification/runtime.test.js"
+    "test:auth": "tsc -p tsconfig.test.json && node --test .test-build/features/auth/utils/authUtils.test.js"
   },
   "dependencies": {
     "firebase": "^12.0.0",

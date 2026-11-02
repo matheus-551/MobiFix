@@ -1,12 +1,13 @@
 rules_version = '2';
 
 // Documentos de prestadores: somente o dono envia/lê; PDF/JPG/PNG de até 5 MB.
+// O envio acontece no cadastro, logo após criar a conta e antes de o e-mail ser verificado (os arquivos
+// só existem em memória no formulário), por isso não exige email_verified; a leitura do dono permanece.
 // A equipe de análise acessa pelo Console / Admin SDK (que ignoram estas regras).
 service firebase.storage {
   match /b/{bucket}/o {
     match /providerDocuments/{uid}/{fileName} {
       allow create: if request.auth != null && request.auth.uid == uid
-        && request.auth.token.email_verified == true
         && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf|image/jpeg|image/png');

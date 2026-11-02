@@ -14,8 +14,8 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // E-mail confirmado por código. Só o servidor (Admin) cria contas com email_verified = true,
-    // então o cadastro direto pelo SDK do navegador não consegue gravar users/perfis.
+    // E-mail confirmado pelo link nativo do Firebase Authentication (claim email_verified do ID Token).
+    // O cliente renova o token após a verificação (getIdToken(true)) para este claim chegar atualizado.
     function emailVerified() {
       return signedIn() && request.auth.token.email_verified == true;
     }
@@ -38,9 +38,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
 
-      // Autocadastro: somente cliente (ativo) ou prestador (pendente de análise).
+      // Autocadastro: somente cliente (ativo) ou prestador (pendente de análise). Acontece logo após
+      // createUserWithEmailAndPassword, ainda sem e-mail verificado (o perfil não pode ser perdido);
+      // todo o restante do sistema (agendamentos, avaliações, edição de perfil) exige e-mail verificado.
       allow create: if isOwner(uid)
-        && emailVerified()
         && request.resource.data.keys().hasOnly(['email', 'role', 'status', 'createdAt', 'updatedAt'])
         && request.resource.data.email is string
         && request.resource.data.email.lower() == request.auth.token.email.lower()
@@ -58,7 +59,6 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin();
 
       allow create: if isOwner(uid)
-        && emailVerified()
         && roleAfter(uid) == 'client'
         && request.resource.data.keys().hasOnly(['firstName', 'lastName', 'phone', 'state', 'createdAt', 'updatedAt'])
         && request.resource.data.firstName is string && request.resource.data.firstName.size() in range(1, 61)
@@ -69,6 +69,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
 
       allow update: if isOwner(uid)
+        && emailVerified()
         && onlyChanges(['firstName', 'lastName', 'phone', 'state', 'updatedAt'])
         && request.resource.data.updatedAt == request.time;
 
@@ -79,7 +80,6 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin();
 
       allow create: if isOwner(uid)
-        && emailVerified()
         && roleAfter(uid) == 'provider'
         && request.resource.data.keys().hasOnly([
           'responsibleName', 'displayName', 'phone', 'taxIdType', 'taxId', 'address', 'city', 'state',
@@ -102,6 +102,7 @@ service cloud.firestore {
 
       // O prestador edita só dados de contato/atuação; documentos, CPF/CNPJ e aprovação são administrativos.
       allow update: if isOwner(uid)
+        && emailVerified()
         && onlyChanges(['displayName', 'phone', 'address', 'city', 'state', 'vehicleTypeIds', 'specialtyIds', 'updatedAt'])
         && request.resource.data.updatedAt == request.time;
       allow update: if isAdmin();
@@ -113,9 +114,9 @@ service cloud.firestore {
     // e só pode cancelar; "confirmed"/"completed" são definidos por admin (ou, no futuro, pelo prestador/API).
     match /appointments/{appointmentId} {
       // resource == null permite o getDoc de verificação de duplicidade em documento ainda inexistente.
-      allow read: if signedIn() && (resource == null || resource.data.clientId == request.auth.uid || isAdmin());
+      allow read: if emailVerified() && (resource == null || resource.data.clientId == request.auth.uid || isAdmin());
 
-      allow create: if signedIn()
+      allow create: if emailVerified()
         && request.resource.data.clientId == request.auth.uid
         && appointmentId == request.auth.uid + '_' + request.resource.data.slotId
         && request.resource.data.keys().hasOnly([
@@ -133,7 +134,7 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
 
-      allow update: if signedIn()
+      allow update: if emailVerified()
         && resource.data.clientId == request.auth.uid
         && resource.data.status in ['requested', 'confirmed']
         && onlyChanges(['status', 'updatedAt'])
@@ -147,9 +148,9 @@ service cloud.firestore {
     // Avaliações são públicas para usuários autenticados (aparecem no perfil do prestador).
     // Uma por atendimento concluído: ID = ID do agendamento; sem edição ou exclusão.
     match /reviews/{appointmentId} {
-      allow read: if signedIn();
+      allow read: if emailVerified();
 
-      allow create: if signedIn()
+      allow create: if emailVerified()
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.appointmentId == appointmentId
         && exists(/databases/$(database)/documents/appointments/$(appointmentId))
@@ -165,8 +166,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // emailVerifications e emailVerificationLimits (códigos, tentativas, limites de reenvio) caem aqui:
-    // o navegador não lê nem escreve; somente o servidor, com a conta de serviço, acessa essas coleções.
+    // Qualquer outra coleção: acesso negado ao navegador.
     match /{document=**} {
       allow read, write: if false;
     }

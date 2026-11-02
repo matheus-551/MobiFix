@@ -24,38 +24,41 @@ npm run dev                  # http://localhost:3000
    `apiKey`→`NEXT_PUBLIC_FIREBASE_API_KEY`, `authDomain`→`..._AUTH_DOMAIN`, `projectId`→`..._PROJECT_ID`, `storageBucket`→`..._STORAGE_BUCKET`, `messagingSenderId`→`..._MESSAGING_SENDER_ID`, `appId`→`..._APP_ID`.
 3. **Authentication → Método de login**: habilite **E-mail/senha** (não é necessário o "link por e-mail").
 4. **Authentication → Configurações → Domínios autorizados**: confirme `localhost` e adicione o domínio de produção. Sem isso, o envio de e-mails com link de retorno falha (`auth/unauthorized-continue-uri`).
-5. **Authentication → Modelos de e-mail**: personalize o e-mail de *Verificação de endereço de e-mail* e o de *Redefinição de senha* (remetente, idioma pt-BR).
+5. **Authentication → Modelos (Templates)**: em *Verificação de endereço de e-mail* e *Redefinição de senha*, escolha o idioma **Português (Brasil)**, personalize nome do remetente/assunto/mensagem e, em **Personalizar URL de ação**, informe `https://SEU-DOMINIO/auth/acao` (em desenvolvimento: `http://localhost:3000/auth/acao`). Assim os links abrem a página do MobiFix (`/auth/acao`). Se deixar a URL padrão, o Firebase usa a página hospedada dele (`/__/auth/action`) e ambos os fluxos continuam funcionando.
 6. **Firestore Database**: crie o banco (modo produção) e publique as regras de `firebase/firestore.rules`.
 7. **Storage**: ative o Cloud Storage (exige plano Blaze em projetos novos) e publique `firebase/storage.rules`.
 8. Publicar regras: cole o conteúdo no console, ou use `npm i -g firebase-tools && firebase login && firebase use <projectId> && firebase deploy --only firestore:rules,storage`.
 
-### Verificação de e-mail por código
+### Autenticação (100% Firebase Authentication)
 
-Cadastro de **cliente** e de **prestador** só termina depois que o usuário digita um código de 6 dígitos enviado ao e-mail informado. Fluxo:
+Não há provedor de e-mail externo, domínio de envio, códigos próprios nem segredos HMAC: os e-mails de verificação e de redefinição são enviados pelo próprio Firebase.
 
-1. O formulário é preenchido e validado no navegador. Ao continuar, `POST /api/email-verification/request` gera o código no servidor, grava **apenas o hash (HMAC)** em `emailVerifications/{sha256(email)}` (Firestore, coleção fechada às regras) e envia o e-mail (Resend).
-2. O usuário digita o código na etapa de verificação: `POST /api/email-verification/confirm`. O servidor confere expiração (10 min), tentativas (máx. 5 por código) e uso único, e devolve um **token de uso único** (15 min) preso àquele e-mail.
-3. `POST /api/email-verification/account` consome o token e cria a conta no Firebase Authentication **com `emailVerified: true`** (Identity Toolkit, conta de serviço). Só o servidor consegue isso.
-4. O navegador entra com a conta, grava `users` + perfil (as regras exigem `email_verified`) e chama `POST /api/v1/usuarios` na API.
+**Cadastro** (cliente em `/cadastro`, prestador em `/cadastro/prestador`):
+1. `createUserWithEmailAndPassword` cria a conta (a senha só passa pelo SDK do Firebase).
+2. `users` + perfil (e documentos, no prestador) são gravados; se algo falhar, a conta é removida.
+3. `sendEmailVerification` envia o link. A tela de verificação (`VerifyEmailPanel`) informa o envio, tem "Reenviar e-mail" (intervalo de 60 s e no máximo 5 por hora, persistido no navegador; o Firebase ainda aplica o próprio limite), "Já confirmei meu e-mail" (`reload()` + renovação do ID Token) e checagem automática a cada 5 s e ao voltar para a aba.
 
-Proteções: reenvio com intervalo de 60 s e no máximo 5 envios por hora por e-mail; limite por IP (20 pedidos e 60 confirmações por hora); um novo código invalida o anterior; código nunca em claro no banco nem no navegador; credenciais de serviço só em variáveis de servidor.
+**Verificação**: o link abre `/auth/acao?mode=verifyEmail&oobCode=…`, que chama `applyActionCode`. Em seguida o app faz `reload()` e `getIdToken(true)`, de modo que o claim `email_verified` chegue atualizado às regras do Firestore/Storage e ao backend.
 
-Código: `src/server/**` (serviço, adaptadores Firestore/Identity/Resend), `src/app/api/email-verification/*` (route handlers), `src/features/auth/services/emailVerificationService.ts` e `components/EmailVerificationStep.tsx` (interface). Testes do servidor: `npm run test:server`.
+**Login** (`signInWithEmailAndPassword`): sem e-mail verificado a sessão existe (necessária para reenviar o link), mas `RequireAuth`/`GuestOnly` levam a `/verificar-email`; nenhuma área protegida abre. A persistência segue "Manter conectado".
 
-**Configuração obrigatória** (sem isso a verificação responde "não configurada" e ninguém consegue se cadastrar):
+**Redefinição de senha**: `/recuperar-senha` chama `sendPasswordResetEmail` (resposta sempre neutra, sem revelar se o e-mail existe; mesmo intervalo de reenvio). O link abre `/auth/acao?mode=resetPassword&oobCode=…`, que usa `verifyPasswordResetCode` + `confirmPasswordReset`.
 
-- Variáveis de servidor em `.env.local` (veja `.env.example`): `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY`, `EMAIL_VERIFICATION_SECRET` (32+ caracteres), `RESEND_API_KEY`, `EMAIL_FROM`. A conta de serviço precisa dos papéis *Cloud Datastore User* e *Firebase Authentication Admin*.
-- Conta na Resend com o domínio do remetente verificado (outro provedor HTTP/SMTP: implemente `Mailer` em `src/server/email/`).
-- **Republicar** `firebase/firestore.rules` e `firebase/storage.rules` (agora exigem `email_verified`). Contas já existentes não são afetadas.
-- Em produção, atrás de proxy/CDN, confirme que `x-forwarded-for` é confiável; a limitação por IP depende dele.
+**Autorização**: as regras (`firebase/*.rules`) exigem `email_verified` para agendamentos, avaliações e edição de perfil. A criação de `users`/perfis e o upload dos documentos do prestador acontecem logo após criar a conta (ainda sem verificação) para não perder dados do cadastro; só o dono consegue gravar, com validações de campos.
+
+Código: `src/features/auth/` (serviços, contexto, guardas, `VerifyEmailPanel`, páginas `VerifyEmail`/`AuthAction`) e `src/features/auth/utils/` (política de reenvio e leitura dos links, com testes: `npm run test:auth`).
+
+**Configuração obrigatória no Firebase Console**: método *E-mail/senha* habilitado; domínios autorizados (`localhost` e produção); (opcional, recomendado) URL de ação personalizada e idioma pt-BR nos modelos; **republicar** `firebase/firestore.rules` e `firebase/storage.rules`.
 
 ## Integração com a API Spring Boot
 
 O navegador chama `/api/v1/...` na própria origem e o `rewrite` de `next.config.ts` repassa para `API_URL` (padrão `http://localhost:8080`), evitando CORS. Cliente HTTP único: `src/shared/lib/api/http.ts`.
 
-Endpoints usados: `POST /usuarios` (no cadastro, após a verificação do e-mail), `GET /prestadores`, `GET /prestadores/{id}`, `GET /prestadores/{id}/horarios`, `GET /tipos-veiculo`, `GET /especialidades`, `GET|POST /usuarios(/me)`, `GET|POST|DELETE /veiculos`.
+Toda requisição enviada com sessão ativa leva `Authorization: Bearer <Firebase ID Token>` (`src/shared/lib/api/http.ts`; em resposta 401 o token é renovado e a chamada repetida uma vez). O usuário é criado na API sob demanda (`GET /usuarios/me` → 404 → `POST /usuarios`), já com e-mail verificado.
 
-Limitações atuais da API (não simuladas): sem agendamentos, avaliações, serviços com preço/duração, nota média, imagens ou busca textual; autenticação ainda é uma identidade simulada no servidor (todos os logins compartilham o mesmo usuário/veículos da API). Agendamentos e avaliações ficam no Firestore (`appointments`, `reviews`; regras em `firebase/firestore.rules`, que precisam ser publicadas) e são acessados só por `features/cliente/services/appointmentService.ts` e `reviewService.ts`.
+Endpoints usados: `GET|POST /usuarios(/me)`, `GET /prestadores`, `GET /prestadores/{id}`, `GET /prestadores/{id}/horarios`, `GET /tipos-veiculo`, `GET /especialidades`, `GET|POST|DELETE /veiculos`.
+
+Limitações atuais da API (não simuladas): sem agendamentos, avaliações, serviços com preço/duração, nota média, imagens ou busca textual; **a API ainda não valida o ID Token** (usa uma identidade simulada no servidor: todos os logins compartilham o mesmo usuário/veículos). A validação com Firebase Admin SDK, o bloqueio de `email_verified=false` e o uso do UID como identificador precisam ser implementados no Spring Boot. Agendamentos e avaliações ficam no Firestore (`appointments`, `reviews`; regras em `firebase/firestore.rules`, que precisam ser publicadas) e são acessados só por `features/cliente/services/appointmentService.ts` e `reviewService.ts`.
 
 ## Modelo de dados (Firestore)
 
@@ -72,7 +75,7 @@ Estados do prestador: cadastro (conta criada) → análise documental → aprova
 ## Segurança
 
 - A autorização efetiva está nas **regras** (`firebase/*.rules`): o usuário não consegue definir papel diferente de cliente/prestador, nem alterar papel, status ou aprovação, nem ler dados de outros.
-- Os guardas de rota (`RequireAuth`, `GuestOnly`) são só experiência de navegação; não substituem as regras.
+- Os guardas de rota (`RequireAuth`, `GuestOnly`) são só experiência de navegação; não substituem as regras nem a validação do token no backend.
 - Limitação atual: não há sessão no servidor (cookie + Firebase Admin SDK), então as páginas privadas são protegidas no cliente; os dados continuam protegidos pelas regras. Aprovação automatizada de prestadores exigiria uma API com Admin SDK.
 
 ## Comandos
@@ -81,6 +84,7 @@ Estados do prestador: cadastro (conta criada) → análise documental → aprova
 npm run dev        # desenvolvimento
 npm run lint       # ESLint
 npm run typecheck  # tsc --noEmit
+npm run test:auth  # testes unitários (política de reenvio, links de ação)
 npm run build      # build de produção
 ```
 
@@ -88,10 +92,9 @@ npm run build      # build de produção
 
 ```
 src/app/                 rotas (uma pasta por URL) e layout
-src/features/auth/       login, cadastro de cliente, verificação de e-mail, recuperação, contexto e guardas
+src/features/auth/       login, cadastro de cliente, verificação de e-mail, recuperação/redefinição, contexto e guardas
 src/features/cliente/    painel do cliente
-src/features/prestador/  cadastro em 6 etapas (a 6ª é a verificação do e-mail), validação, serviço de registro, painel
-src/server/              lógica de servidor da verificação de e-mail (somente route handlers importam)
+src/features/prestador/  cadastro em 6 etapas (a 6ª é a verificação do e-mail pelo link do Firebase), validação, serviço de registro, painel
 src/features/home/       landing page
 src/shared/              componentes, tipos, validadores, utilitários, catálogos
 src/shared/lib/firebase/ configuração validada e inicialização única (preguiçosa)
@@ -101,7 +104,7 @@ firebase/                regras do Firestore e do Storage
 
 ## Rotas
 
-`/` · `/login` · `/cadastro` · `/cadastro/prestador` · `/recuperar-senha` · `/cliente` e `/cliente/{prestadores, prestadores/resultados, prestadores/perfil, agendar, agendamentos, agendamentos/avaliar, veiculos}` (cliente) · `/prestador` (prestador) · `/termos` · `/privacidade`
+`/` · `/login` · `/cadastro` · `/cadastro/prestador` · `/recuperar-senha` · `/verificar-email` · `/auth/acao` · `/cliente` e `/cliente/{prestadores, prestadores/resultados, prestadores/perfil, agendar, agendamentos, agendamentos/avaliar, veiculos}` (cliente) · `/prestador` (prestador) · `/termos` · `/privacidade`
 
 A rota dinâmica genérica `/[pagina]` foi removida; `/login` continua igual.
 
