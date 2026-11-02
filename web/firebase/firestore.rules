@@ -14,6 +14,12 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // E-mail confirmado por código. Só o servidor (Admin) cria contas com email_verified = true,
+    // então o cadastro direto pelo SDK do navegador não consegue gravar users/perfis.
+    function emailVerified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -34,6 +40,7 @@ service cloud.firestore {
 
       // Autocadastro: somente cliente (ativo) ou prestador (pendente de análise).
       allow create: if isOwner(uid)
+        && emailVerified()
         && request.resource.data.keys().hasOnly(['email', 'role', 'status', 'createdAt', 'updatedAt'])
         && request.resource.data.email is string
         && request.resource.data.email.lower() == request.auth.token.email.lower()
@@ -51,6 +58,7 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin();
 
       allow create: if isOwner(uid)
+        && emailVerified()
         && roleAfter(uid) == 'client'
         && request.resource.data.keys().hasOnly(['firstName', 'lastName', 'phone', 'state', 'createdAt', 'updatedAt'])
         && request.resource.data.firstName is string && request.resource.data.firstName.size() in range(1, 61)
@@ -71,6 +79,7 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin();
 
       allow create: if isOwner(uid)
+        && emailVerified()
         && roleAfter(uid) == 'provider'
         && request.resource.data.keys().hasOnly([
           'responsibleName', 'displayName', 'phone', 'taxIdType', 'taxId', 'address', 'city', 'state',
@@ -156,6 +165,8 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // emailVerifications e emailVerificationLimits (códigos, tentativas, limites de reenvio) caem aqui:
+    // o navegador não lê nem escreve; somente o servidor, com a conta de serviço, acessa essas coleções.
     match /{document=**} {
       allow read, write: if false;
     }
