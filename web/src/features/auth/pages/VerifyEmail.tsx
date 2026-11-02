@@ -16,7 +16,7 @@ import { homeForRole } from "../utils/homeFor";
  */
 export default function VerifyEmail() {
   const router = useRouter();
-  const { status, user, account } = useAuth();
+  const { authReady, user, account } = useAuth();
   const [done, setDone] = useState(false);
 
   const home = homeForRole(account?.role ?? "client");
@@ -24,8 +24,8 @@ export default function VerifyEmail() {
   const goLogin = useCallback(() => router.replace(routes.login), [router]);
 
   useEffect(() => {
-    if (status === "ready" && !user && !done) router.replace(routes.login);
-  }, [status, user, done, router]);
+    if (authReady && !user && !done) router.replace(routes.login);
+  }, [authReady, user, done, router]);
 
   if (done) {
     return (
@@ -40,7 +40,8 @@ export default function VerifyEmail() {
     );
   }
 
-  if (status === "loading" || !user) return <LoadingScreen />;
+  // Só precisa do usuário do Authentication; o perfil do Firestore pode chegar depois.
+  if (!authReady || !user) return <LoadingScreen />;
 
   return (
     <AuthPage>

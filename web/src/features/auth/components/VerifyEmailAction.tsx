@@ -9,6 +9,7 @@ import { Alert } from "@/shared/components/Alert";
 import { getFirebaseAuth } from "@/shared/lib/firebase/client";
 import { getErrorMessage } from "@/shared/utils/firebaseErrors";
 import { useAuth } from "../hooks/useAuth";
+import { notifyEmailVerified } from "../utils/authChannel";
 import { homeForRole } from "../utils/homeFor";
 
 type Phase = { name: "working" } | { name: "done" } | { name: "error"; message: string };
@@ -24,7 +25,10 @@ export function VerifyEmailAction({ oobCode }: { oobCode: string }) {
     if (started.current) return;
     started.current = true;
     applyActionCode(getFirebaseAuth(), oobCode)
-      .then(() => setPhase({ name: "done" }))
+      .then(() => {
+        notifyEmailVerified();
+        setPhase({ name: "done" });
+      })
       .catch((error) => setPhase({ name: "error", message: getErrorMessage(error) }));
   }, [oobCode]);
 

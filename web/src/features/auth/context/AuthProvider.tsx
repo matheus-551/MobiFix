@@ -18,6 +18,8 @@ import { refreshEmailVerification } from "../services/authService";
 export interface AuthState {
   /** `loading` até conhecermos o usuário do Authentication e (se houver) o documento `users/{uid}`. */
   status: "loading" | "ready";
+  /** `true` assim que o Firebase Authentication informou se há sessão (não espera o perfil do Firestore). */
+  authReady: boolean;
   user: User | null;
   /** Espelha `user.emailVerified`; muda de estado quando o ID Token é renovado ou `refresh()` é chamado. */
   emailVerified: boolean;
@@ -32,7 +34,10 @@ export const AuthContext = createContext<AuthState | null>(null);
 
 type Snapshot = Omit<AuthState, "refresh">;
 
-const INITIAL: Snapshot = { status: "loading", user: null, emailVerified: false, account: null, error: null };
+/** Tempo máximo esperando o perfil `users/{uid}` antes de mostrar um erro em vez de carregar para sempre. */
+const ACCOUNT_TIMEOUT_MS = 15000;
+
+const INITIAL: Snapshot = { status: "loading", authReady: false, user: null, emailVerified: false, account: null, error: null };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Snapshot>(INITIAL);
@@ -41,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let unsubscribeAccount: (() => void) | undefined;
     let unsubscribeAuth: (() => void) | undefined;
     let currentUid: string | null = null;
+    let accountTimer: ReturnType<typeof setTimeout> | undefined;
 
     try {
       // onIdTokenChanged (e não onAuthStateChanged) dispara também quando o token é renovado.
@@ -50,8 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!user) {
             unsubscribeAccount?.();
             unsubscribeAccount = undefined;
+            clearTimeout(accountTimer);
             currentUid = null;
-            setState({ status: "ready", user: null, emailVerified: false, account: null, error: null });
+            setState({ status: "ready", authReady: true, user: null, emailVerified: false, account: null, error: null });
             return;
           }
 
@@ -62,11 +69,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           unsubscribeAccount?.();
+          clearTimeout(accountTimer);
           currentUid = user.uid;
-          setState({ status: "loading", user, emailVerified: user.emailVerified, account: null, error: null });
+          setState({ status: "loading", authReady: true, user, emailVerified: user.emailVerified, account: null, error: null });
+          accountTimer = setTimeout(() => {
+            setState((current) =>
+              current.status === "loading" && current.user?.uid === user.uid
+                ? {
+                    ...current,
+                    status: "ready",
+                    error: "Não foi possível carregar o seu perfil. Verifique a conexão e se o Firestore está criado e com as regras publicadas.",
+                  }
+                : current,
+            );
+          }, ACCOUNT_TIMEOUT_MS);
           unsubscribeAccount = subscribeToAccount(
             user.uid,
-            (account) =>
+            (account) => {
+              clearTimeout(accountTimer);
               setState((current) => ({
                 ...current,
                 status: "ready",
@@ -74,18 +94,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 emailVerified: user.emailVerified,
                 account,
                 error: null,
-              })),
-            (error) => setState((current) => ({ ...current, status: "ready", error: getErrorMessage(error) })),
+              }));
+            },
+            (error) => {
+              clearTimeout(accountTimer);
+              setState((current) => ({ ...current, status: "ready", error: getErrorMessage(error) }));
+            },
           );
         },
-        (error) => setState({ ...INITIAL, status: "ready", error: getErrorMessage(error) }),
+        (error) => setState({ ...INITIAL, status: "ready", authReady: true, error: getErrorMessage(error) }),
       );
     } catch (error) {
       // Normalmente: variáveis do Firebase ausentes. Exibimos a causa em vez de falhar em silêncio.
-      queueMicrotask(() => setState({ ...INITIAL, status: "ready", error: getErrorMessage(error) }));
+      queueMicrotask(() => setState({ ...INITIAL, status: "ready", authReady: true, error: getErrorMessage(error) }));
     }
 
     return () => {
+      clearTimeout(accountTimer);
       unsubscribeAuth?.();
       unsubscribeAccount?.();
     };

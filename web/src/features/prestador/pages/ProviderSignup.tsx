@@ -42,7 +42,7 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sendFailed, setSendFailed] = useState(false);
+  const [emailDispatch, setEmailDispatch] = useState<Promise<boolean>>();
   const [done, setDone] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const goToDashboard = useCallback(() => router.replace(routes.providerHome), [router]);
@@ -105,7 +105,7 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
     onHold(true);
     try {
       const result = await registerProvider(values);
-      setSendFailed(!result.verificationEmailSent);
+      setEmailDispatch(result.verificationEmail);
       setStepIndex((index) => index + 1);
     } catch (error) {
       onHold(false);
@@ -159,7 +159,7 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
           <h2 ref={headingRef} tabIndex={-1} className="mb-5 text-sm font-bold text-orange-500 outline-none">
             {STEP_TITLES[step.id]}
           </h2>
-          <VerifyEmailPanel onVerified={handleVerified} onLeave={handleLeave} initialSendFailed={sendFailed} />
+          <VerifyEmailPanel onVerified={handleVerified} onLeave={handleLeave} emailDispatch={emailDispatch} />
         </div>
       ) : (
       <form onSubmit={handleSubmit} noValidate>

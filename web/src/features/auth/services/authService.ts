@@ -32,8 +32,11 @@ export interface ClientRegistrationInput {
 }
 
 export interface RegistrationResult {
-  /** `false` quando a conta foi criada mas o e-mail não pôde ser enviado; a tela oferece o reenvio. */
-  verificationEmailSent: boolean;
+  /**
+   * Envio do link em andamento (nunca rejeita). Resolve `false` se o e-mail não pôde ser enviado; a tela
+   * de verificação já aparece enquanto isso e oferece o reenvio.
+   */
+  verificationEmail: Promise<boolean>;
 }
 
 /** Lançado quando o reenvio é barrado pela política local (intervalo mínimo / limite por hora). */
@@ -126,13 +129,16 @@ export async function createAccount(email: string, password: string, displayName
   const auth = getFirebaseAuth();
   await setPersistence(auth, browserLocalPersistence);
   const { user } = await createUserWithEmailAndPassword(auth, email, password);
-  await updateProfile(user, { displayName }).catch(() => undefined);
+  // O nome de exibição é cosmético: não precisa travar o cadastro esperando esta chamada.
+  void updateProfile(user, { displayName }).catch(() => undefined);
   return user;
 }
 
 /** Desfaz a conta recém-criada quando a gravação do perfil falha (evita conta sem perfil). */
 export async function discardAccount(user: User): Promise<void> {
   await deleteUser(user).catch(() => undefined);
+  // Garante que não sobra sessão (caso a exclusão falhe) antes de a tela liberar o redirecionamento.
+  await signOut(getFirebaseAuth()).catch(() => undefined);
 }
 
 /**
@@ -174,5 +180,6 @@ export async function registerClient(input: ClientRegistrationInput): Promise<Re
     throw error;
   }
 
-  return { verificationEmailSent: await dispatchVerificationEmail(user) };
+  // Só depois do perfil gravado (sem e-mail para conta descartada), e sem bloquear a troca de tela.
+  return { verificationEmail: dispatchVerificationEmail(user) };
 }

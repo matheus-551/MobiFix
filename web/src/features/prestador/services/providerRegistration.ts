@@ -83,5 +83,5 @@ export async function registerProvider(values: ProviderFormValues): Promise<Regi
     throw error;
   }
 
-  return { verificationEmailSent: await dispatchVerificationEmail(user) };
+  return { verificationEmail: dispatchVerificationEmail(user) };
 }

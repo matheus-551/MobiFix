@@ -76,7 +76,7 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState<Stage>("form");
-  const [sendFailed, setSendFailed] = useState(false);
+  const [emailDispatch, setEmailDispatch] = useState<Promise<boolean>>();
   const goToDashboard = useCallback(() => router.replace(routes.clientHome), [router]);
   const handleVerified = useCallback(() => setStage("done"), []);
   const handleLeave = useCallback(() => {
@@ -104,7 +104,7 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
     onHold(true);
     try {
       const result = await registerClient(values);
-      setSendFailed(!result.verificationEmailSent);
+      setEmailDispatch(result.verificationEmail);
       setStage("verify");
     } catch (error) {
       onHold(false);
@@ -135,7 +135,7 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
     return (
       <AuthPage width="max-w-lg">
         <RoleTabs active="client" />
-        <VerifyEmailPanel onVerified={handleVerified} onLeave={handleLeave} initialSendFailed={sendFailed} />
+        <VerifyEmailPanel onVerified={handleVerified} onLeave={handleLeave} emailDispatch={emailDispatch} />
       </AuthPage>
     );
   }

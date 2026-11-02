@@ -7,10 +7,11 @@ import { Button } from "@/shared/components/Button";
 import { getErrorMessage } from "@/shared/utils/firebaseErrors";
 import { useAuth } from "../hooks/useAuth";
 import { ResendBlockedError, resendVerificationEmail, signOutUser, verificationKey } from "../services/authService";
+import { listenEmailVerified } from "../utils/authChannel";
 import { checkResend } from "../utils/resendPolicy";
 
 /** Intervalo da checagem automática enquanto a aba está visível. */
-const POLL_MS = 5000;
+const POLL_MS = 3000;
 
 type Feedback = { tone: "error" | "success" | "info"; text: string } | null;
 
@@ -19,24 +20,23 @@ interface VerifyEmailPanelProps {
   onVerified: () => void;
   /** Chamado depois de encerrar a sessão ("Sair / usar outra conta"). */
   onLeave: () => void;
-  /** `false` quando o envio automático logo após o cadastro falhou: orienta a reenviar. */
-  initialSendFailed?: boolean;
+  /** Envio do link feito logo após o cadastro (em andamento): a tela aparece na hora e mostra o resultado. */
+  emailDispatch?: Promise<boolean>;
 }
 
 /**
  * Tela "Verifique seu e-mail": informa o envio, reenvia o link (com intervalo), atualiza o status
  * manualmente e acompanha a verificação automaticamente (polling + retorno de foco à aba).
  */
-export function VerifyEmailPanel({ onVerified, onLeave, initialSendFailed = false }: VerifyEmailPanelProps) {
+export function VerifyEmailPanel({ onVerified, onLeave, emailDispatch }: VerifyEmailPanelProps) {
   const { user, emailVerified, refresh } = useAuth();
   const uid = user?.uid ?? "";
   const email = user?.email ?? "";
 
   const [feedback, setFeedback] = useState<Feedback>(
-    initialSendFailed
-      ? { tone: "error", text: "Sua conta foi criada, mas não conseguimos enviar o e-mail agora. Toque em “Reenviar e-mail”." }
-      : null,
+    emailDispatch ? { tone: "info", text: "Enviando o link de verificação..." } : null,
   );
+  const [sending, setSending] = useState(Boolean(emailDispatch));
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -49,6 +49,24 @@ export function VerifyEmailPanel({ onVerified, onLeave, initialSendFailed = fals
     return () => clearInterval(timer);
   }, []);
   const decision = uid ? checkResend(verificationKey(uid), now) : { allowed: false, waitSeconds: 0, reason: null };
+
+  // Resultado do envio iniciado no cadastro.
+  useEffect(() => {
+    if (!emailDispatch) return;
+    let active = true;
+    void emailDispatch.then((sent) => {
+      if (!active) return;
+      setSending(false);
+      setFeedback(
+        sent
+          ? { tone: "success", text: "Enviamos o link de verificação. Confira também a caixa de spam." }
+          : { tone: "error", text: "Sua conta foi criada, mas não conseguimos enviar o e-mail agora. Toque em “Reenviar e-mail”." },
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [emailDispatch]);
 
   useEffect(() => {
     if (emailVerified && !notified.current) {
@@ -77,7 +95,10 @@ export function VerifyEmailPanel({ onVerified, onLeave, initialSendFailed = fals
     const timer = setInterval(tick, POLL_MS);
     document.addEventListener("visibilitychange", tick);
     window.addEventListener("focus", tick);
+    // Link aberto em outra aba deste navegador: confirma imediatamente.
+    const stopListening = listenEmailVerified(() => void silentCheck());
     return () => {
+      stopListening();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", tick);
       window.removeEventListener("focus", tick);
@@ -106,7 +127,7 @@ export function VerifyEmailPanel({ onVerified, onLeave, initialSendFailed = fals
   }
 
   async function handleResend() {
-    if (busy.current || !decision.allowed) return;
+    if (busy.current || sending || !decision.allowed) return;
     busy.current = true;
     setResending(true);
     setFeedback(null);
@@ -162,7 +183,7 @@ export function VerifyEmailPanel({ onVerified, onLeave, initialSendFailed = fals
         onClick={handleResend}
         loading={resending}
         loadingLabel="Enviando..."
-        disabled={checking || !decision.allowed}
+        disabled={checking || sending || !decision.allowed}
       >
         {decision.reason === "cooldown"
           ? `Reenviar e-mail (${decision.waitSeconds}s)`
