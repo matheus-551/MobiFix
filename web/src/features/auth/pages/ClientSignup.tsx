@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { routes } from "@/routes";
@@ -21,10 +21,14 @@ import {
   validatePhone,
   validateState,
 } from "@/shared/validators/fields";
+import { EmailVerificationStep } from "../components/EmailVerificationStep";
 import { GuestOnly } from "../components/RouteGuards";
+import { RegistrationSuccess } from "../components/RegistrationSuccess";
 import { RoleTabs } from "../components/RoleTabs";
 import { TermsCheckbox } from "../components/TermsCheckbox";
+import type { ApiSyncResult } from "../services/apiRegistration";
 import { registerClient } from "../services/authService";
+import { EmailVerificationError, requestVerificationCode } from "../services/emailVerificationService";
 
 interface Values {
   firstName: string;
@@ -65,18 +69,27 @@ function validate(values: Values): Errors {
   });
 }
 
-function ClientSignupForm() {
+type Stage = "form" | "verify" | "done";
+
+function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
   const router = useRouter();
   const [values, setValues] = useState<Values>(INITIAL);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [stage, setStage] = useState<Stage>("form");
+  const [resendSeconds, setResendSeconds] = useState(60);
+  const [apiResult, setApiResult] = useState<ApiSyncResult>({ ok: true });
+  /** Último e-mail para o qual um código foi enviado (evita novo envio ao voltar e avançar sem mudar o e-mail). */
+  const sent = useRef<{ email: string; at: number; resendSeconds: number } | null>(null);
+  const goToDashboard = useCallback(() => router.replace(routes.clientHome), [router]);
 
   function update<K extends keyof Values>(key: K, value: Values[K]) {
     setValues((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
+  /** ETAPAS 1 e 2: valida o formulário e solicita o código de verificação ao servidor. */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (loading) return;
@@ -86,14 +99,72 @@ function ClientSignupForm() {
     setFormError(null);
     if (Object.keys(found).length > 0) return;
 
+    const email = values.email.trim().toLowerCase();
+    const previous = sent.current;
+    if (previous && previous.email === email) {
+      const elapsed = Math.floor((Date.now() - previous.at) / 1000);
+      setResendSeconds(Math.max(0, previous.resendSeconds - elapsed));
+      setStage("verify");
+      return;
+    }
+
     setLoading(true);
     try {
-      await registerClient(values);
-      router.replace(routes.clientHome);
+      const result = await requestVerificationCode(email);
+      sent.current = { email, at: Date.now(), resendSeconds: result.resendAfterSeconds };
+      setResendSeconds(result.resendAfterSeconds);
+      setStage("verify");
     } catch (error) {
-      setFormError(getErrorMessage(error));
+      if (error instanceof EmailVerificationError && error.code === "email_in_use") {
+        setErrors({ email: error.message });
+      } else {
+        setFormError(error instanceof EmailVerificationError ? error.message : getErrorMessage(error));
+      }
+    } finally {
       setLoading(false);
     }
+  }
+
+  /** ETAPAS 5 e 6: com o e-mail verificado, cria a conta, grava o perfil e cadastra na API. */
+  async function finalize(verificationToken: string) {
+    onHold(true);
+    try {
+      const result = await registerClient({ ...values, verificationToken });
+      setApiResult(result.api);
+      setStage("done");
+    } catch (error) {
+      onHold(false);
+      throw error;
+    }
+  }
+
+  if (stage === "done") {
+    return (
+      <AuthPage width="max-w-lg">
+        <RegistrationSuccess
+          title="Cadastro concluído!"
+          message="Seu e-mail foi verificado e sua conta de cliente está pronta."
+          api={apiResult}
+          onContinue={goToDashboard}
+          continueLabel="Ir para o painel"
+        />
+      </AuthPage>
+    );
+  }
+
+  if (stage === "verify") {
+    return (
+      <AuthPage width="max-w-lg">
+        <RoleTabs active="client" />
+        <EmailVerificationStep
+          email={values.email.trim().toLowerCase()}
+          initialResendSeconds={resendSeconds}
+          onVerified={finalize}
+          onBack={() => setStage("form")}
+          backLabel="Voltar e editar dados"
+        />
+      </AuthPage>
+    );
   }
 
   return (
@@ -123,8 +194,8 @@ function ClientSignupForm() {
 
         <TermsCheckbox checked={values.acceptedTerms} onChange={(checked) => update("acceptedTerms", checked)} error={errors.acceptedTerms} />
 
-        <Button type="submit" loading={loading} loadingLabel="Criando conta...">
-          Criar Conta
+        <Button type="submit" loading={loading} loadingLabel="Enviando código...">
+          Continuar e verificar e-mail
         </Button>
       </form>
 
@@ -139,9 +210,10 @@ function ClientSignupForm() {
 }
 
 export default function ClientSignup() {
+  const [hold, setHold] = useState(false);
   return (
-    <GuestOnly>
-      <ClientSignupForm />
+    <GuestOnly hold={hold}>
+      <ClientSignupForm onHold={setHold} />
     </GuestOnly>
   );
 }

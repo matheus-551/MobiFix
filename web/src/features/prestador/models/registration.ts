@@ -45,7 +45,7 @@ export const INITIAL_PROVIDER_VALUES: ProviderFormValues = {
 };
 
 export interface ProviderStep {
-  id: "personal" | "company" | "specialties" | "documents" | "confirmation";
+  id: "personal" | "company" | "specialties" | "documents" | "confirmation" | "verification";
   label: string;
 }
 
@@ -55,6 +55,7 @@ export const PROVIDER_STEPS: readonly ProviderStep[] = [
   { id: "specialties", label: "Especialidades" },
   { id: "documents", label: "Documentos" },
   { id: "confirmation", label: "Confirmação" },
+  { id: "verification", label: "Verificação" },
 ];
 
 export type DocumentField = Extract<keyof ProviderFormValues, "identityDocument" | "businessProof">;

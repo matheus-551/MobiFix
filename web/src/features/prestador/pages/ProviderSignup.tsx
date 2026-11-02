@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { routes } from "@/routes";
@@ -9,8 +9,12 @@ import { AuthPage } from "@/shared/components/AuthCard";
 import { BrandLogo } from "@/shared/components/BrandLogo";
 import { Button } from "@/shared/components/Button";
 import { getErrorMessage } from "@/shared/utils/firebaseErrors";
+import { EmailVerificationStep } from "@/features/auth/components/EmailVerificationStep";
 import { GuestOnly } from "@/features/auth/components/RouteGuards";
+import { RegistrationSuccess } from "@/features/auth/components/RegistrationSuccess";
 import { RoleTabs } from "@/features/auth/components/RoleTabs";
+import type { ApiSyncResult } from "@/features/auth/services/apiRegistration";
+import { EmailVerificationError, requestVerificationCode } from "@/features/auth/services/emailVerificationService";
 import { INITIAL_PROVIDER_VALUES, PROVIDER_STEPS, type ProviderFormValues } from "../models/registration";
 import { validateProviderStep, type ProviderErrors } from "../forms/providerValidation";
 import { ProviderStepper } from "../forms/ProviderStepper";
@@ -30,23 +34,31 @@ const STEP_TITLES: Record<(typeof PROVIDER_STEPS)[number]["id"], string> = {
   specialties: "Passo 3: Especialidades e Serviços",
   documents: "Passo 4: Documentos",
   confirmation: "Passo 5: Confirmação",
+  verification: "Passo 6: Verificação de E-mail",
 };
 
-function ProviderSignupForm() {
+function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
   const router = useRouter();
   const [values, setValues] = useState<ProviderFormValues>(INITIAL_PROVIDER_VALUES);
   const [errors, setErrors] = useState<ProviderErrors>({});
   const [stepIndex, setStepIndex] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(60);
+  const [done, setDone] = useState<ApiSyncResult | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  /** Último e-mail para o qual um código foi enviado (evita novo envio ao voltar e avançar sem mudar o e-mail). */
+  const sent = useRef<{ email: string; at: number; resendSeconds: number } | null>(null);
+  const goToDashboard = useCallback(() => router.replace(routes.providerHome), [router]);
 
   const step = PROVIDER_STEPS[stepIndex];
-  const isLast = stepIndex === PROVIDER_STEPS.length - 1;
+  /** Último passo do formulário: ao avançar daqui o código é enviado e a verificação começa. */
+  const isLastFormStep = step.id === "confirmation";
 
   // Move o foco para o título ao trocar de etapa (leitores de tela e navegação por teclado).
   useEffect(() => {
-    headingRef.current?.focus();
+    // Na verificação o foco vai para o campo do código (EmailVerificationStep), não para o título.
+    if (PROVIDER_STEPS[stepIndex].id !== "verification") headingRef.current?.focus();
   }, [stepIndex]);
 
   function update<K extends keyof ProviderFormValues>(key: K, value: ProviderFormValues[K]) {
@@ -75,14 +87,15 @@ function ProviderSignupForm() {
       return;
     }
 
-    if (!isLast) {
+    if (!isLastFormStep) {
       setStepIndex((index) => index + 1);
       return;
     }
 
-    // Revalida tudo antes de criar a conta (defesa contra estados inconsistentes).
-    for (let index = 0; index < PROVIDER_STEPS.length - 1; index++) {
-      const stepErrors = validateProviderStep(PROVIDER_STEPS[index].id, values);
+    // Revalida tudo antes de pedir o código (defesa contra estados inconsistentes).
+    const formSteps = PROVIDER_STEPS.filter((item) => item.id !== "verification");
+    for (let index = 0; index < formSteps.length - 1; index++) {
+      const stepErrors = validateProviderStep(formSteps[index].id, values);
       if (Object.keys(stepErrors).length > 0) {
         setStepIndex(index);
         setErrors(stepErrors);
@@ -91,14 +104,59 @@ function ProviderSignupForm() {
       }
     }
 
+    const email = values.email.trim().toLowerCase();
+    const previous = sent.current;
+    if (previous && previous.email === email) {
+      const elapsed = Math.floor((Date.now() - previous.at) / 1000);
+      setResendSeconds(Math.max(0, previous.resendSeconds - elapsed));
+      setStepIndex((index) => index + 1);
+      return;
+    }
+
     setLoading(true);
     try {
-      await registerProvider(values);
-      router.replace(routes.providerHome);
+      const result = await requestVerificationCode(email);
+      sent.current = { email, at: Date.now(), resendSeconds: result.resendAfterSeconds };
+      setResendSeconds(result.resendAfterSeconds);
+      setStepIndex((index) => index + 1);
     } catch (error) {
-      setFormError(getErrorMessage(error));
+      if (error instanceof EmailVerificationError && error.code === "email_in_use") {
+        // Leva o usuário ao campo de e-mail (passo 1) com a mensagem no próprio campo.
+        setStepIndex(0);
+        setErrors({ email: error.message });
+        setFormError("Este e-mail já está cadastrado.");
+      } else {
+        setFormError(error instanceof EmailVerificationError ? error.message : getErrorMessage(error));
+      }
+    } finally {
       setLoading(false);
     }
+  }
+
+  /** Com o e-mail verificado: cria a conta, envia documentos, grava o perfil e cadastra na API. */
+  async function finalize(verificationToken: string) {
+    onHold(true);
+    try {
+      const result = await registerProvider(values, verificationToken);
+      setDone(result.api);
+    } catch (error) {
+      onHold(false);
+      throw error;
+    }
+  }
+
+  if (done) {
+    return (
+      <AuthPage width="max-w-2xl">
+        <RegistrationSuccess
+          title="Cadastro enviado!"
+          message="Seu e-mail foi verificado e seu cadastro de prestador foi criado. Nossa equipe vai analisar seus documentos."
+          api={done}
+          onContinue={goToDashboard}
+          continueLabel="Ir para o painel"
+        />
+      </AuthPage>
+    );
   }
 
   return (
@@ -114,6 +172,20 @@ function ProviderSignupForm() {
       <RoleTabs active="provider" />
       <ProviderStepper currentIndex={stepIndex} />
 
+      {step.id === "verification" ? (
+        <div>
+          <h2 ref={headingRef} tabIndex={-1} className="mb-5 text-sm font-bold text-orange-500 outline-none">
+            {STEP_TITLES[step.id]}
+          </h2>
+          <EmailVerificationStep
+            email={values.email.trim().toLowerCase()}
+            initialResendSeconds={resendSeconds}
+            onVerified={finalize}
+            onBack={goBack}
+            backLabel="Voltar e revisar dados"
+          />
+        </div>
+      ) : (
       <form onSubmit={handleSubmit} noValidate>
         <h2 ref={headingRef} tabIndex={-1} className="mb-5 text-sm font-bold text-orange-500 outline-none">
           {STEP_TITLES[step.id]}
@@ -141,11 +213,12 @@ function ProviderSignupForm() {
               Voltar
             </Button>
           )}
-          <Button type="submit" loading={loading} loadingLabel="Enviando cadastro..." className="sm:w-auto">
-            {isLast ? "Concluir Cadastro" : "Próximo Passo"}
+          <Button type="submit" loading={loading} loadingLabel={isLastFormStep ? "Enviando código..." : "Aguarde..."} className="sm:w-auto">
+            {isLastFormStep ? "Enviar código de verificação" : "Próximo Passo"}
           </Button>
         </div>
       </form>
+      )}
 
       <p className="mt-6 text-center text-xs text-gray-500">
         Já possui uma conta?{" "}
@@ -158,9 +231,10 @@ function ProviderSignupForm() {
 }
 
 export default function ProviderSignup() {
+  const [hold, setHold] = useState(false);
   return (
-    <GuestOnly>
-      <ProviderSignupForm />
+    <GuestOnly hold={hold}>
+      <ProviderSignupForm onHold={setHold} />
     </GuestOnly>
   );
 }

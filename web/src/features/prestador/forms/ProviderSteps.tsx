@@ -129,8 +129,9 @@ export function ConfirmationStep({ values, errors, update }: StepProps) {
         ))}
       </dl>
       <p className="rounded-lg bg-orange-50 px-4 py-3 text-xs text-orange-900">
-        Depois de enviar, você receberá um e-mail para confirmar seu endereço. Seu perfil só aparecerá para clientes
-        depois da análise dos documentos pela equipe MobiFix.
+        Ao continuar, enviaremos um código de verificação para o e-mail informado; o cadastro só é concluído depois
+        que você digitar esse código. Seu perfil só aparecerá para clientes depois da análise dos documentos pela
+        equipe MobiFix.
       </p>
       <TermsCheckbox checked={values.acceptedTerms} onChange={(checked) => update("acceptedTerms", checked)} error={errors.acceptedTerms} />
     </div>

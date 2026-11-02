@@ -1,8 +1,11 @@
-import { createUserWithEmailAndPassword, deleteUser, updateProfile } from "firebase/auth";
+import { deleteUser } from "firebase/auth";
 import { doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { getDb, getFirebaseAuth, getFirebaseStorage } from "@/shared/lib/firebase/client";
 import { onlyDigits } from "@/shared/utils/format";
+import { registerUserInApi, type ApiSyncResult } from "@/features/auth/services/apiRegistration";
+import { signIn } from "@/features/auth/services/authService";
+import { createVerifiedAccount } from "@/features/auth/services/emailVerificationService";
 import type { ProviderDocument } from "@/shared/types/domain";
 import {
   DOCUMENT_KIND_BY_FIELD,
@@ -14,21 +17,38 @@ function safeFileName(name: string): string {
   return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
 }
 
+export interface ProviderRegistrationResult {
+  /** Resultado do `POST /api/v1/usuarios` (tipo PRESTADOR); `ok: false` não desfaz o cadastro no Firebase. */
+  api: ApiSyncResult;
+}
+
 /**
- * Cadastro do prestador. A conta só é criada ao final do fluxo, então não existem contas
- * "pela metade" quando o usuário abandona uma etapa. Ordem: Authentication → upload dos
- * documentos → escrita atômica de `users` + `providerProfiles`. Qualquer falha desfaz o
- * que foi criado (arquivos e conta). O prestador nasce com `status: "pending"` e
- * `approvalStatus: "under_review"`; a aprovação é uma ação administrativa posterior.
+ * Cadastro do prestador, executado só depois da verificação do e-mail. A conta só é criada ao final
+ * do fluxo, então não existem contas "pela metade" quando o usuário abandona uma etapa. Ordem:
+ * conta criada pelo servidor com `emailVerified: true` (exige o token da verificação) → login →
+ * upload dos documentos → escrita atômica de `users` + `providerProfiles` → `POST /api/v1/usuarios`
+ * (PRESTADOR). Qualquer falha antes da API desfaz o que foi criado (arquivos e conta). O prestador
+ * nasce com `status: "pending"` e `approvalStatus: "under_review"`; a aprovação é administrativa.
+ *
+ * O perfil profissional da API (`POST /prestadores/me/perfil`) NÃO é enviado aqui: ele exige logradouro,
+ * número, bairro e CEP separados e IDs numéricos do catálogo da API, dados que este formulário não coleta
+ * (o prestador completa em /prestador/perfil, que já usa esse contrato).
  */
-export async function registerProvider(values: ProviderFormValues): Promise<void> {
-  const auth = getFirebaseAuth();
+export async function registerProvider(
+  values: ProviderFormValues,
+  verificationToken: string,
+): Promise<ProviderRegistrationResult> {
   const email = values.email.trim().toLowerCase();
-  const { user } = await createUserWithEmailAndPassword(auth, email, values.password);
+  const responsibleName = values.responsibleName.trim();
+
+  await createVerifiedAccount({ email, token: verificationToken, password: values.password, displayName: responsibleName });
+  await signIn(email, values.password, true);
+
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Sessão não iniciada após criar a conta.");
   const uploadedPaths: string[] = [];
 
   try {
-    await updateProfile(user, { displayName: values.responsibleName.trim() });
 
     const storage = getFirebaseStorage();
     const documents: ProviderDocument[] = [];
@@ -54,7 +74,7 @@ export async function registerProvider(values: ProviderFormValues): Promise<void
       updatedAt: serverTimestamp(),
     });
     batch.set(doc(db, "providerProfiles", user.uid), {
-      responsibleName: values.responsibleName.trim(),
+      responsibleName,
       displayName: values.companyName.trim(),
       phone: values.phone,
       taxIdType: values.taxIdType,
@@ -75,4 +95,15 @@ export async function registerProvider(values: ProviderFormValues): Promise<void
     await deleteUser(user).catch(() => undefined);
     throw error;
   }
+
+  const [nome, ...rest] = responsibleName.split(/\s+/);
+  const api = await registerUserInApi({
+    nome,
+    sobrenome: rest.join(" ") || nome,
+    email,
+    telefone: onlyDigits(values.phone),
+    uf: values.state,
+    tipo: "PRESTADOR",
+  });
+  return { api };
 }

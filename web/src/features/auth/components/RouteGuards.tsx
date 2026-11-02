@@ -64,14 +64,17 @@ export function RequireAuth({ role, children }: { role: UserRole; children: Reac
   return <>{children}</>;
 }
 
-/** Para páginas de visitante (login, cadastro): redireciona quem já está autenticado. */
-export function GuestOnly({ children }: { children: ReactNode }) {
+/**
+ * Para páginas de visitante (login, cadastro): redireciona quem já está autenticado.
+ * `hold` suspende o redirecionamento (usado pelos cadastros enquanto mostram a confirmação de sucesso).
+ */
+export function GuestOnly({ children, hold = false }: { children: ReactNode; hold?: boolean }) {
   const router = useRouter();
   const { status, user, account } = useAuth();
 
   let redirectTo: string | null = null;
   // Sem `account` o perfil ainda está sendo gravado (cadastro em andamento): não redirecionar.
-  if (status === "ready" && user && account) {
+  if (status === "ready" && user && account && !hold) {
     redirectTo = homeForRole(account.role);
   }
 

@@ -1,18 +1,19 @@
 import {
   browserLocalPersistence,
   browserSessionPersistence,
-  createUserWithEmailAndPassword,
   deleteUser,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
-  updateProfile,
 } from "firebase/auth";
 import { doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getDb, getFirebaseAuth } from "@/shared/lib/firebase/client";
 import { getErrorCode } from "@/shared/utils/firebaseErrors";
+import { onlyDigits } from "@/shared/utils/format";
 import { routes } from "@/routes";
+import { registerUserInApi, type ApiSyncResult } from "./apiRegistration";
+import { createVerifiedAccount } from "./emailVerificationService";
 
 export interface ClientRegistrationInput {
   firstName: string;
@@ -21,6 +22,13 @@ export interface ClientRegistrationInput {
   phone: string;
   state: string;
   password: string;
+  /** Token de uso único devolvido pelo servidor depois que o código do e-mail foi confirmado. */
+  verificationToken: string;
+}
+
+export interface ClientRegistrationResult {
+  /** Resultado do `POST /api/v1/usuarios`; `ok: false` não desfaz o cadastro no Firebase. */
+  api: ApiSyncResult;
 }
 
 /** `remember` = persistência local (sobrevive ao fechamento do navegador); caso contrário, apenas a sessão da aba. */
@@ -49,21 +57,29 @@ export async function requestPasswordReset(email: string): Promise<void> {
 }
 
 /**
- * Cria a conta no Authentication e os documentos `users` e `clientProfiles` em uma única
- * escrita atômica. Se a gravação falhar, a conta recém-criada é removida para não deixar
- * um usuário sem perfil.
+ * Cadastro do cliente (executado só depois da verificação do e-mail):
+ * 1. o servidor cria a conta no Authentication já com `emailVerified: true` (exige o token da verificação);
+ * 2. o navegador entra com a conta e grava `users` + `clientProfiles` em uma escrita atômica
+ *    (as regras do Firestore exigem `email_verified`); se falhar, a conta é removida;
+ * 3. o usuário é cadastrado na API (`POST /api/v1/usuarios`, tipo CLIENTE).
  */
-export async function registerClient(input: ClientRegistrationInput): Promise<void> {
-  const auth = getFirebaseAuth();
+export async function registerClient(input: ClientRegistrationInput): Promise<ClientRegistrationResult> {
   const email = input.email.trim().toLowerCase();
-  const credential = await createUserWithEmailAndPassword(auth, email, input.password);
-  const { user } = credential;
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+
+  await createVerifiedAccount({
+    email,
+    token: input.verificationToken,
+    password: input.password,
+    displayName: `${firstName} ${lastName}`,
+  });
+  await signIn(email, input.password, true);
+
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Sessão não iniciada após criar a conta.");
 
   try {
-    const firstName = input.firstName.trim();
-    const lastName = input.lastName.trim();
-    await updateProfile(user, { displayName: `${firstName} ${lastName}` });
-
     const db = getDb();
     const batch = writeBatch(db);
     batch.set(doc(db, "users", user.uid), {
@@ -86,4 +102,14 @@ export async function registerClient(input: ClientRegistrationInput): Promise<vo
     await deleteUser(user).catch(() => undefined);
     throw error;
   }
+
+  const api = await registerUserInApi({
+    nome: firstName,
+    sobrenome: lastName,
+    email,
+    telefone: onlyDigits(input.phone),
+    uf: input.state,
+    tipo: "CLIENTE",
+  });
+  return { api };
 }

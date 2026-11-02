@@ -61,5 +61,8 @@ export function validateProviderStep(step: ProviderStep["id"], values: ProviderF
       });
     case "confirmation":
       return compactErrors({ acceptedTerms: validateAccepted(values.acceptedTerms) });
+    case "verification":
+      // O código é validado pelo servidor (EmailVerificationStep); não há campo do formulário aqui.
+      return {};
   }
 }
