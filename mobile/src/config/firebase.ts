@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 // @ts-ignore: getReactNativePersistence existe no bundle React Native, mas nem sempre nos tipos
 import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
 
 // Chaves de app web do Firebase identificam o projeto e não são segredo.
 const firebaseConfig = {
@@ -25,4 +24,3 @@ function criarAuth() {
 }
 
 export const auth = criarAuth();
-export const db = getFirestore(app);

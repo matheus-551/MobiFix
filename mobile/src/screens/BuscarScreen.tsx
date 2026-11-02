@@ -5,7 +5,10 @@ import CartaoPrestador from '../components/CartaoPrestador';
 import FiltroChips from '../components/FiltroChips';
 import Logo from '../components/Logo';
 import Tela from '../components/Tela';
-import { ESPECIALIDADES, TIPOS_VEICULO } from '../constants/catalogo';
+import { buscarCatalogos } from '../services/catalogoService';
+import { mensagemErro } from '../services/authService';
+import { ItemCatalogo } from '../services/contratos';
+import Botao from '../components/Botao';
 import { buscarPrestadores, Prestador } from '../services/prestadorService';
 import { colors } from '../theme/colors';
 
@@ -26,27 +29,43 @@ export default function BuscarScreen() {
   const [veiculo, setVeiculo] = useState<string | null>(null);
   const [especialidade, setEspecialidade] = useState<string | null>(null);
 
+  const [catalogos, setCatalogos] = useState<{ tiposVeiculo: ItemCatalogo[]; especialidades: ItemCatalogo[] } | null>(null);
+  const [pagina, setPagina] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(0);
+  const [tentativa, setTentativa] = useState(0);
   useEffect(() => {
-    buscarPrestadores()
-      .then(setTodos)
-      .catch(() => setErro('Não foi possível carregar os profissionais. Verifique a conexão e as regras do Firestore.'))
-      .finally(() => setCarregando(false));
-  }, []);
+    if (!catalogos) return;
+    let ativo = true;
+    buscarPrestadores({ page: pagina, tipoVeiculoId: catalogos.tiposVeiculo.find(item => item.nome === veiculo)?.id,
+      especialidadeId: catalogos.especialidades.find(item => item.nome === especialidade)?.id })
+      .then(resposta => {
+        if (!ativo) return;
+        setTodos(anterior => pagina === 0 ? resposta.content : [...anterior, ...resposta.content.filter(item => !anterior.some(p => p.id === item.id))]);
+        setTotalPaginas(resposta.totalPages);
+      }).catch(e => { if (ativo) setErro(mensagemErro(e)); })
+      .finally(() => { if (ativo) setCarregando(false); });
+    return () => { ativo = false; };
+  }, [pagina, veiculo, especialidade, catalogos, tentativa]);
+  useEffect(() => {
+    let ativo = true;
+    buscarCatalogos().then(dados => { if (ativo) setCatalogos(dados); })
+      .catch(e => { if (ativo) { setErro(mensagemErro(e)); setCarregando(false); } });
+    return () => { ativo = false; };
+  }, [tentativa]);
 
   const lista = useMemo(() => {
     const q = normalizar(busca.trim());
     return todos
       .filter((p) => !veiculo || p.tiposVeiculo.includes(veiculo))
       .filter((p) => !especialidade || p.especialidades.includes(especialidade))
-      .filter((p) => !q || normalizar([p.nomeExibicao, p.cidade, ...p.especialidades].join(' ')).includes(q))
-      .sort((a, b) => b.notaMedia - a.notaMedia || a.nomeExibicao.localeCompare(b.nomeExibicao));
+      .filter((p) => !q || normalizar([p.nomeExibicao, p.cidade, ...p.especialidades].join(' ')).includes(q));
   }, [todos, busca, veiculo, especialidade]);
 
   return (
     <Tela edges={['top']}>
       <Logo tamanho={64} />
       <Text style={styles.titulo}>Encontre os melhores profissionais automotivos</Text>
-      <Campo placeholder="🔍  Serviço ou oficina" value={busca} onChangeText={setBusca} returnKeyType="search" />
+      <Campo placeholder="Filtrar os profissionais carregados" value={busca} onChangeText={setBusca} returnKeyType="search" />
 
       <View style={styles.passos}>
         {PASSOS.map((p) => (
@@ -58,16 +77,16 @@ export default function BuscarScreen() {
       </View>
 
       <Text style={styles.rotulo}>Tipo de veículo</Text>
-      <FiltroChips opcoes={TIPOS_VEICULO} valor={veiculo} onChange={setVeiculo} />
+      <FiltroChips opcoes={(catalogos?.tiposVeiculo ?? []).map(item => item.nome)} valor={veiculo} onChange={valor => { setCarregando(true); setErro(''); setPagina(0); setTodos([]); setVeiculo(valor); }} />
       <Text style={styles.rotulo}>Especialidade</Text>
-      <FiltroChips opcoes={ESPECIALIDADES} valor={especialidade} onChange={setEspecialidade} />
+      <FiltroChips opcoes={(catalogos?.especialidades ?? []).map(item => item.nome)} valor={especialidade} onChange={valor => { setCarregando(true); setErro(''); setPagina(0); setTodos([]); setEspecialidade(valor); }} />
 
       <Text style={styles.secao}>
-        {carregando ? 'Carregando…' : `${lista.length} ${lista.length === 1 ? 'profissional encontrado' : 'profissionais encontrados'}`}
+        {carregando ? 'Carregando…' : `${lista.length} ${lista.length === 1 ? 'profissional carregado' : 'profissionais carregados'}`}
       </Text>
 
       {carregando && <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />}
-      {erro !== '' && <Text style={styles.erro}>{erro}</Text>}
+      {erro !== '' && <><Text style={styles.erro}>{erro}</Text><Botao titulo="Tentar novamente" onPress={() => { setCarregando(true); setErro(''); setCatalogos(null); setTentativa(t => t + 1); }} /></>}
 
       <View style={{ gap: 12 }}>
         {lista.map((p) => (
@@ -81,9 +100,10 @@ export default function BuscarScreen() {
 
       {!carregando && erro === '' && lista.length === 0 && (
         <Text style={styles.vazio}>
-          Nenhum profissional encontrado. Tente outro filtro, ou aguarde: os profissionais aparecem aqui depois que verificam o e-mail e entram no app.
+          Nenhum profissional encontrado nesta lista. Tente outro filtro ou carregue mais resultados, se disponíveis.
         </Text>
       )}
+      {erro === '' && pagina + 1 < totalPaginas && <Botao titulo="Carregar mais" carregando={carregando} onPress={() => { setCarregando(true); setErro(''); setPagina(p => p + 1); }} />}
     </Tela>
   );
 }
