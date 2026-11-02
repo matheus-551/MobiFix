@@ -29,15 +29,31 @@ npm run dev                  # http://localhost:3000
 7. **Storage**: ative o Cloud Storage (exige plano Blaze em projetos novos) e publique `firebase/storage.rules`.
 8. Publicar regras: cole o conteúdo no console, ou use `npm i -g firebase-tools && firebase login && firebase use <projectId> && firebase deploy --only firestore:rules,storage`.
 
-### Verificação de e-mail
+### Verificação de e-mail por código
 
-A verificação de e-mail foi removida do frontend: após o cadastro ou o login o usuário vai direto ao painel do seu papel. Login, cadastro, sessão e recuperação de senha seguem iguais.
+Cadastro de **cliente** e de **prestador** só termina depois que o usuário digita um código de 6 dígitos enviado ao e-mail informado. Fluxo:
+
+1. O formulário é preenchido e validado no navegador. Ao continuar, `POST /api/email-verification/request` gera o código no servidor, grava **apenas o hash (HMAC)** em `emailVerifications/{sha256(email)}` (Firestore, coleção fechada às regras) e envia o e-mail (Resend).
+2. O usuário digita o código na etapa de verificação: `POST /api/email-verification/confirm`. O servidor confere expiração (10 min), tentativas (máx. 5 por código) e uso único, e devolve um **token de uso único** (15 min) preso àquele e-mail.
+3. `POST /api/email-verification/account` consome o token e cria a conta no Firebase Authentication **com `emailVerified: true`** (Identity Toolkit, conta de serviço). Só o servidor consegue isso.
+4. O navegador entra com a conta, grava `users` + perfil (as regras exigem `email_verified`) e chama `POST /api/v1/usuarios` na API.
+
+Proteções: reenvio com intervalo de 60 s e no máximo 5 envios por hora por e-mail; limite por IP (20 pedidos e 60 confirmações por hora); um novo código invalida o anterior; código nunca em claro no banco nem no navegador; credenciais de serviço só em variáveis de servidor.
+
+Código: `src/server/**` (serviço, adaptadores Firestore/Identity/Resend), `src/app/api/email-verification/*` (route handlers), `src/features/auth/services/emailVerificationService.ts` e `components/EmailVerificationStep.tsx` (interface). Testes do servidor: `npm run test:server`.
+
+**Configuração obrigatória** (sem isso a verificação responde "não configurada" e ninguém consegue se cadastrar):
+
+- Variáveis de servidor em `.env.local` (veja `.env.example`): `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY`, `EMAIL_VERIFICATION_SECRET` (32+ caracteres), `RESEND_API_KEY`, `EMAIL_FROM`. A conta de serviço precisa dos papéis *Cloud Datastore User* e *Firebase Authentication Admin*.
+- Conta na Resend com o domínio do remetente verificado (outro provedor HTTP/SMTP: implemente `Mailer` em `src/server/email/`).
+- **Republicar** `firebase/firestore.rules` e `firebase/storage.rules` (agora exigem `email_verified`). Contas já existentes não são afetadas.
+- Em produção, atrás de proxy/CDN, confirme que `x-forwarded-for` é confiável; a limitação por IP depende dele.
 
 ## Integração com a API Spring Boot
 
 O navegador chama `/api/v1/...` na própria origem e o `rewrite` de `next.config.ts` repassa para `API_URL` (padrão `http://localhost:8080`), evitando CORS. Cliente HTTP único: `src/shared/lib/api/http.ts`.
 
-Endpoints usados: `GET /prestadores`, `GET /prestadores/{id}`, `GET /prestadores/{id}/horarios`, `GET /tipos-veiculo`, `GET /especialidades`, `GET|POST /usuarios(/me)`, `GET|POST|DELETE /veiculos`.
+Endpoints usados: `POST /usuarios` (no cadastro, após a verificação do e-mail), `GET /prestadores`, `GET /prestadores/{id}`, `GET /prestadores/{id}/horarios`, `GET /tipos-veiculo`, `GET /especialidades`, `GET|POST /usuarios(/me)`, `GET|POST|DELETE /veiculos`.
 
 Limitações atuais da API (não simuladas): sem agendamentos, avaliações, serviços com preço/duração, nota média, imagens ou busca textual; autenticação ainda é uma identidade simulada no servidor (todos os logins compartilham o mesmo usuário/veículos da API). Agendamentos e avaliações ficam no Firestore (`appointments`, `reviews`; regras em `firebase/firestore.rules`, que precisam ser publicadas) e são acessados só por `features/cliente/services/appointmentService.ts` e `reviewService.ts`.
 
@@ -72,9 +88,10 @@ npm run build      # build de produção
 
 ```
 src/app/                 rotas (uma pasta por URL) e layout
-src/features/auth/       login, cadastro de cliente, recuperação, contexto e guardas
+src/features/auth/       login, cadastro de cliente, verificação de e-mail, recuperação, contexto e guardas
 src/features/cliente/    painel do cliente
-src/features/prestador/  cadastro em 5 etapas, validação, serviço de registro, painel
+src/features/prestador/  cadastro em 6 etapas (a 6ª é a verificação do e-mail), validação, serviço de registro, painel
+src/server/              lógica de servidor da verificação de e-mail (somente route handlers importam)
 src/features/home/       landing page
 src/shared/              componentes, tipos, validadores, utilitários, catálogos
 src/shared/lib/firebase/ configuração validada e inicialização única (preguiçosa)
