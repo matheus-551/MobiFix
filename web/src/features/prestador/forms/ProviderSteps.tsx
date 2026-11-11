@@ -1,12 +1,13 @@
 "use client";
 
 import { BRAZILIAN_STATES, SPECIALTIES, VEHICLE_TYPES } from "@/shared/constants/catalog";
+import { EMAIL_VERIFICATION_ENABLED } from "@/shared/config/features";
 import { PasswordField, SelectField, TextField } from "@/shared/components/FormControls";
 import { formatCpfCnpj, formatPhone } from "@/shared/utils/format";
 import { TermsCheckbox } from "@/features/auth/components/TermsCheckbox";
 import type { ProviderFormValues, TaxIdType } from "../models/registration";
 import type { ProviderErrors } from "./providerValidation";
-import { CheckboxGroup, FileField } from "./ProviderFormFields";
+import { CheckboxGroup } from "./ProviderFormFields";
 
 export interface StepProps {
   values: ProviderFormValues;
@@ -89,20 +90,6 @@ export function SpecialtiesStep({ values, errors, update }: StepProps) {
   );
 }
 
-export function DocumentsStep({ values, errors, update }: StepProps) {
-  const proofLabel = values.taxIdType === "cnpj" ? "Cartão CNPJ ou alvará de funcionamento" : "Comprovante de endereço profissional";
-  return (
-    <div className="space-y-5">
-      <FileField label="Documento de identificação do responsável" required
-        description="RG ou CNH (frente e verso em um único arquivo)."
-        file={values.identityDocument} onChange={(file) => update("identityDocument", file)} error={errors.identityDocument} />
-      <FileField label={proofLabel}
-        description="Opcional, mas acelera a análise do seu cadastro."
-        file={values.businessProof} onChange={(file) => update("businessProof", file)} error={errors.businessProof} />
-    </div>
-  );
-}
-
 export function ConfirmationStep({ values, errors, update }: StepProps) {
   const vehicleNames = VEHICLE_TYPES.filter((v) => values.vehicleTypeIds.includes(v.id)).map((v) => v.name).join(", ");
   const specialtyNames = SPECIALTIES.filter((s) => values.specialtyIds.includes(s.id)).map((s) => s.name).join(", ");
@@ -115,7 +102,6 @@ export function ConfirmationStep({ values, errors, update }: StepProps) {
     ["Endereço", `${values.address}, ${values.city} - ${values.state}`],
     ["Veículos", vehicleNames],
     ["Especialidades", specialtyNames],
-    ["Documentos", [values.identityDocument?.name, values.businessProof?.name].filter(Boolean).join(", ")],
   ];
 
   return (
@@ -129,9 +115,10 @@ export function ConfirmationStep({ values, errors, update }: StepProps) {
         ))}
       </dl>
       <p className="rounded-lg bg-orange-50 px-4 py-3 text-xs text-orange-900">
-        Ao continuar, criaremos sua conta e enviaremos um link de verificação para o e-mail informado; o acesso só é
-        liberado depois que você clicar nesse link. Seu perfil só aparecerá para clientes depois da análise dos documentos pela
-        equipe MobiFix.
+        {EMAIL_VERIFICATION_ENABLED
+          ? "Ao continuar, criaremos sua conta e enviaremos um link de verificação para o e-mail informado; o acesso só é liberado depois que você clicar nesse link. "
+          : "Ao continuar, criaremos sua conta e você já poderá acessá-la. "}
+        Seu perfil só aparecerá para clientes depois da análise do cadastro pela equipe MobiFix.
       </p>
       <TermsCheckbox checked={values.acceptedTerms} onChange={(checked) => update("acceptedTerms", checked)} error={errors.acceptedTerms} />
     </div>

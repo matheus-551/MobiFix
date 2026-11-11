@@ -1,9 +1,6 @@
-import type { ProviderDocumentKind } from "@/shared/types/domain";
+import { EMAIL_VERIFICATION_ENABLED } from "@/shared/config/features";
 
 export type TaxIdType = "cpf" | "cnpj";
-
-export const DOCUMENT_ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/png"] as const;
-export const DOCUMENT_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Estado completo do formulário em etapas (preservado ao navegar entre elas). */
 export interface ProviderFormValues {
@@ -20,8 +17,6 @@ export interface ProviderFormValues {
   state: string;
   vehicleTypeIds: string[];
   specialtyIds: string[];
-  identityDocument: File | null;
-  businessProof: File | null;
   acceptedTerms: boolean;
 }
 
@@ -39,28 +34,22 @@ export const INITIAL_PROVIDER_VALUES: ProviderFormValues = {
   state: "",
   vehicleTypeIds: [],
   specialtyIds: [],
-  identityDocument: null,
-  businessProof: null,
   acceptedTerms: false,
 };
 
 export interface ProviderStep {
-  id: "personal" | "company" | "specialties" | "documents" | "confirmation" | "verification";
+  id: "personal" | "company" | "specialties" | "confirmation" | "verification";
   label: string;
 }
 
+/**
+ * Etapas do cadastro. A etapa final "Verificação" (e-mail) só existe com a verificação de e-mail ativa
+ * (NEXT_PUBLIC_EMAIL_VERIFICATION_ENABLED, ver `src/shared/config/features.ts`).
+ */
 export const PROVIDER_STEPS: readonly ProviderStep[] = [
   { id: "personal", label: "Dados Pessoais" },
   { id: "company", label: "Dados da Empresa" },
   { id: "specialties", label: "Especialidades" },
-  { id: "documents", label: "Documentos" },
   { id: "confirmation", label: "Confirmação" },
-  { id: "verification", label: "Verificação" },
+  ...(EMAIL_VERIFICATION_ENABLED ? ([{ id: "verification", label: "Verificação" }] as const) : []),
 ];
-
-export type DocumentField = Extract<keyof ProviderFormValues, "identityDocument" | "businessProof">;
-
-export const DOCUMENT_KIND_BY_FIELD: Record<DocumentField, ProviderDocumentKind> = {
-  identityDocument: "identity",
-  businessProof: "business_proof",
-};

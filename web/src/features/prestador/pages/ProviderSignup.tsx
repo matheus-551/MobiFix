@@ -8,6 +8,7 @@ import { Alert } from "@/shared/components/Alert";
 import { AuthPage } from "@/shared/components/AuthCard";
 import { BrandLogo } from "@/shared/components/BrandLogo";
 import { Button } from "@/shared/components/Button";
+import { EMAIL_VERIFICATION_ENABLED } from "@/shared/config/features";
 import { getErrorCode, getErrorMessage } from "@/shared/utils/firebaseErrors";
 import { GuestOnly } from "@/features/auth/components/RouteGuards";
 import { RegistrationSuccess } from "@/features/auth/components/RegistrationSuccess";
@@ -19,7 +20,6 @@ import { ProviderStepper } from "../forms/ProviderStepper";
 import {
   CompanyStep,
   ConfirmationStep,
-  DocumentsStep,
   PersonalStep,
   SpecialtiesStep,
   type StepProps,
@@ -27,12 +27,11 @@ import {
 import { registerProvider } from "../services/providerRegistration";
 
 const STEP_TITLES: Record<(typeof PROVIDER_STEPS)[number]["id"], string> = {
-  personal: "Passo 1: Seus Dados Pessoais",
-  company: "Passo 2: Dados da Empresa/Oficina",
-  specialties: "Passo 3: Especialidades e Serviços",
-  documents: "Passo 4: Documentos",
-  confirmation: "Passo 5: Confirmação",
-  verification: "Passo 6: Verificação de E-mail",
+  personal: "Seus Dados Pessoais",
+  company: "Dados da Empresa/Oficina",
+  specialties: "Especialidades e Serviços",
+  confirmation: "Confirmação",
+  verification: "Verificação de E-mail",
 };
 
 function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
@@ -48,7 +47,8 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
   const goToDashboard = useCallback(() => router.replace(routes.providerHome), [router]);
 
   const step = PROVIDER_STEPS[stepIndex];
-  /** Último passo do formulário: ao avançar daqui a conta é criada, o link é enviado e a verificação começa. */
+  const stepTitle = `Passo ${stepIndex + 1}: ${STEP_TITLES[step.id]}`;
+  /** Último passo do formulário: ao avançar daqui a conta é criada (e, com a verificação ativa, o link é enviado). */
   const isLastFormStep = step.id === "confirmation";
 
   // Move o foco para o título ao trocar de etapa (leitores de tela e navegação por teclado).
@@ -105,8 +105,13 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
     onHold(true);
     try {
       const result = await registerProvider(values);
-      setEmailDispatch(result.verificationEmail);
-      setStepIndex((index) => index + 1);
+      if (result.verificationRequired) {
+        setEmailDispatch(result.verificationEmail);
+        setStepIndex((index) => index + 1);
+      } else {
+        // Verificação desativada: não há etapa de confirmação, o cadastro termina aqui.
+        setDone(true);
+      }
     } catch (error) {
       onHold(false);
       if (getErrorCode(error) === "auth/email-already-in-use") {
@@ -133,7 +138,11 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
       <AuthPage width="max-w-2xl">
         <RegistrationSuccess
           title="Cadastro enviado!"
-          message="Seu e-mail foi verificado e seu cadastro de prestador foi criado. Nossa equipe vai analisar seus documentos."
+          message={
+            EMAIL_VERIFICATION_ENABLED
+              ? "Seu e-mail foi verificado e seu cadastro de prestador foi criado. Nossa equipe vai analisar seu cadastro."
+              : "Seu cadastro de prestador foi criado. Nossa equipe vai analisar seu cadastro."
+          }
           onContinue={goToDashboard}
           continueLabel="Ir para o painel"
         />
@@ -157,14 +166,14 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
       {step.id === "verification" ? (
         <div>
           <h2 ref={headingRef} tabIndex={-1} className="mb-5 text-sm font-bold text-orange-500 outline-none">
-            {STEP_TITLES[step.id]}
+            {stepTitle}
           </h2>
           <VerifyEmailPanel onVerified={handleVerified} onLeave={handleLeave} emailDispatch={emailDispatch} />
         </div>
       ) : (
       <form onSubmit={handleSubmit} noValidate>
         <h2 ref={headingRef} tabIndex={-1} className="mb-5 text-sm font-bold text-orange-500 outline-none">
-          {STEP_TITLES[step.id]}
+          {stepTitle}
         </h2>
 
         {formError && (
@@ -176,7 +185,6 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
         {step.id === "personal" && <PersonalStep {...stepProps} />}
         {step.id === "company" && <CompanyStep {...stepProps} />}
         {step.id === "specialties" && <SpecialtiesStep {...stepProps} />}
-        {step.id === "documents" && <DocumentsStep {...stepProps} />}
         {step.id === "confirmation" && <ConfirmationStep {...stepProps} />}
 
         <div className="mt-8 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -190,7 +198,7 @@ function ProviderSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
             </Button>
           )}
           <Button type="submit" loading={loading} loadingLabel={isLastFormStep ? "Criando conta..." : "Aguarde..."} className="sm:w-auto">
-            {isLastFormStep ? "Criar conta e verificar e-mail" : "Próximo Passo"}
+            {isLastFormStep ? (EMAIL_VERIFICATION_ENABLED ? "Criar conta e verificar e-mail" : "Criar conta") : "Próximo Passo"}
           </Button>
         </div>
       </form>

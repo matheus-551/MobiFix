@@ -9,26 +9,10 @@ import {
   validatePhone,
   validateState,
   validateTaxId,
-  type FieldError,
 } from "@/shared/validators/fields";
-import {
-  DOCUMENT_ACCEPTED_TYPES,
-  DOCUMENT_MAX_BYTES,
-  type ProviderFormValues,
-  type ProviderStep,
-} from "../models/registration";
+import type { ProviderFormValues, ProviderStep } from "../models/registration";
 
 export type ProviderErrors = Partial<Record<keyof ProviderFormValues, string>>;
-
-function validateDocument(file: File | null, label: string, mandatory: boolean): FieldError {
-  if (!file) return mandatory ? `Anexe ${label}.` : null;
-  if (!(DOCUMENT_ACCEPTED_TYPES as readonly string[]).includes(file.type)) {
-    return "Formato não aceito. Envie PDF, JPG ou PNG.";
-  }
-  if (file.size > DOCUMENT_MAX_BYTES) return "O arquivo excede o limite de 5 MB.";
-  if (file.size === 0) return "O arquivo está vazio.";
-  return null;
-}
 
 /** Valida somente os campos da etapa informada. Objeto vazio = etapa válida. */
 export function validateProviderStep(step: ProviderStep["id"], values: ProviderFormValues): ProviderErrors {
@@ -54,15 +38,10 @@ export function validateProviderStep(step: ProviderStep["id"], values: ProviderF
         vehicleTypeIds: values.vehicleTypeIds.length ? null : "Selecione ao menos um tipo de veículo.",
         specialtyIds: values.specialtyIds.length ? null : "Selecione ao menos uma especialidade.",
       });
-    case "documents":
-      return compactErrors({
-        identityDocument: validateDocument(values.identityDocument, "um documento de identificação", true),
-        businessProof: validateDocument(values.businessProof, "o comprovante", false),
-      });
     case "confirmation":
       return compactErrors({ acceptedTerms: validateAccepted(values.acceptedTerms) });
     case "verification":
-      // A verificação é feita pelo link nativo do Firebase (VerifyEmailPanel); não há campo do formulário aqui.
+      // A verificação (quando ativa) é feita pelo link nativo do Firebase (VerifyEmailPanel); não há campo do formulário aqui.
       return {};
   }
 }
