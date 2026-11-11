@@ -8,20 +8,52 @@ import { AuthPage } from "@/shared/components/AuthCard";
 import { BrandLogo } from "@/shared/components/BrandLogo";
 import { Button } from "@/shared/components/Button";
 import { PasswordField, TextField } from "@/shared/components/FormControls";
+import { isEmailAccessGranted } from "@/shared/config/features";
 import { getErrorMessage } from "@/shared/utils/firebaseErrors";
 import { compactErrors, required, validateEmail } from "@/shared/validators/fields";
 import { GuestOnly } from "../components/RouteGuards";
-import { signIn } from "../services/authService";
+import { useAuth } from "../hooks/useAuth";
+import { signIn, signOutUser } from "../services/authService";
 
 type Errors = Partial<Record<"email" | "password", string>>;
 
+const MISSING_PROFILE_MESSAGE =
+  "Sua senha está correta, mas não encontramos o perfil desta conta no MobiFix. " +
+  "Isso acontece com contas criadas fora do cadastro do site. Crie a conta pelo cadastro ou fale com o suporte.";
+
 function LoginForm() {
+  const { status, user, emailVerified, account, error: authError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  /** `true` apenas enquanto o Firebase Authentication processa o e-mail e a senha. */
+  const [submitting, setSubmitting] = useState(false);
+  /** `true` depois que o Firebase aceitou as credenciais; a partir daí o <GuestOnly> deve redirecionar. */
+  const [submitted, setSubmitted] = useState(false);
+
+  // Sessão encerrada depois do login (ex.: "Sair" ou token revogado): volta ao estado inicial do formulário.
+  const [previousUser, setPreviousUser] = useState(user);
+  if (user !== previousUser) {
+    setPreviousUser(user);
+    if (!user) setSubmitted(false);
+  }
+
+  // Credenciais aceitas, mas o app não consegue seguir (perfil `users/{uid}` ausente ou Firestore com erro):
+  // o <GuestOnly> não redireciona nesses casos, então explicamos em vez de deixar o botão girando.
+  const profileProblem =
+    submitted && user && status === "ready" && isEmailAccessGranted(emailVerified) && (authError || !account)
+      ? (authError ?? MISSING_PROFILE_MESSAGE)
+      : null;
+
+  // O carregamento só dura enquanto há algo em andamento: validando credenciais ou aguardando o redirecionamento.
+  const loading = submitting || (submitted && profileProblem === null);
+
+  async function handleLeaveAccount() {
+    await signOutUser().catch(() => undefined);
+    setSubmitted(false);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,14 +67,17 @@ function LoginForm() {
     setFormError(null);
     if (Object.keys(found).length > 0) return;
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       await signIn(email, password, remember);
-      // Em caso de sucesso o <GuestOnly> redireciona: e-mail verificado → painel; não verificado →
-      // /verificar-email (aviso + reenvio do link). Nenhuma área protegida abre sem verificação.
+      // Credenciais aceitas: o <GuestOnly> redireciona (e-mail verificado → painel; não verificado, com a
+      // verificação ativa → /verificar-email). Se não puder redirecionar, `profileProblem` explica o motivo.
+      setSubmitted(true);
     } catch (error) {
       setFormError(getErrorMessage(error));
-      setLoading(false);
+    } finally {
+      // Sempre encerra o estado de envio: sucesso, senha errada, e-mail inexistente, rede ou tempo esgotado.
+      setSubmitting(false);
     }
   }
 
@@ -55,6 +90,14 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {formError && <Alert tone="error">{formError}</Alert>}
+        {profileProblem && (
+          <>
+            <Alert tone="error">{profileProblem}</Alert>
+            <Button variant="secondary" onClick={handleLeaveAccount}>
+              Sair desta conta
+            </Button>
+          </>
+        )}
 
         <TextField
           label="E-mail"

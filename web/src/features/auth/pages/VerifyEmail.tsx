@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { routes } from "@/routes";
 import { AuthPage } from "@/shared/components/AuthCard";
 import { LoadingScreen } from "@/shared/components/LoadingScreen";
+import { EMAIL_VERIFICATION_ENABLED } from "@/shared/config/features";
 import { RegistrationSuccess } from "../components/RegistrationSuccess";
 import { VerifyEmailPanel } from "../components/VerifyEmailPanel";
 import { useAuth } from "../hooks/useAuth";
@@ -26,6 +27,13 @@ export default function VerifyEmail() {
   useEffect(() => {
     if (authReady && !user && !done) router.replace(routes.login);
   }, [authReady, user, done, router]);
+
+  // Verificação desativada: esta etapa não existe. Quem chegar aqui (link antigo, favorito) segue para o painel.
+  useEffect(() => {
+    if (!EMAIL_VERIFICATION_ENABLED && authReady && user) goHome();
+  }, [authReady, user, goHome]);
+
+  if (!EMAIL_VERIFICATION_ENABLED) return <LoadingScreen />;
 
   if (done) {
     return (

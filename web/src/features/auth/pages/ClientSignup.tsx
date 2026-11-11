@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { routes } from "@/routes";
 import { BRAZILIAN_STATES } from "@/shared/constants/catalog";
+import { EMAIL_VERIFICATION_ENABLED } from "@/shared/config/features";
 import { Alert } from "@/shared/components/Alert";
 import { AuthPage } from "@/shared/components/AuthCard";
 import { Button } from "@/shared/components/Button";
@@ -89,7 +90,7 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
     setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
-  /** Valida o formulário, cria a conta no Firebase Authentication e envia o link de verificação. */
+  /** Valida o formulário, cria a conta no Firebase Authentication e (se a verificação estiver ativa) envia o link. */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (loading) return;
@@ -104,8 +105,13 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
     onHold(true);
     try {
       const result = await registerClient(values);
-      setEmailDispatch(result.verificationEmail);
-      setStage("verify");
+      if (result.verificationRequired) {
+        setEmailDispatch(result.verificationEmail);
+        setStage("verify");
+      } else {
+        // Verificação desativada: nenhuma confirmação é exigida, a conta já está pronta para uso.
+        setStage("done");
+      }
     } catch (error) {
       onHold(false);
       if (getErrorCode(error) === "auth/email-already-in-use") {
@@ -123,7 +129,11 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
       <AuthPage width="max-w-lg">
         <RegistrationSuccess
           title="Cadastro concluído!"
-          message="Seu e-mail foi verificado e sua conta de cliente está pronta."
+          message={
+            EMAIL_VERIFICATION_ENABLED
+              ? "Seu e-mail foi verificado e sua conta de cliente está pronta."
+              : "Sua conta de cliente foi criada e já está pronta para uso."
+          }
           onContinue={goToDashboard}
           continueLabel="Ir para o painel"
         />
@@ -168,7 +178,7 @@ function ClientSignupForm({ onHold }: { onHold: (hold: boolean) => void }) {
         <TermsCheckbox checked={values.acceptedTerms} onChange={(checked) => update("acceptedTerms", checked)} error={errors.acceptedTerms} />
 
         <Button type="submit" loading={loading} loadingLabel="Criando conta...">
-          Criar conta e verificar e-mail
+          {EMAIL_VERIFICATION_ENABLED ? "Criar conta e verificar e-mail" : "Criar conta"}
         </Button>
       </form>
 
