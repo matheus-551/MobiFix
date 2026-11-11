@@ -1,33 +1,20 @@
-import { ApiError, apiRequest } from "@/shared/lib/api/http";
+import { apiRequest } from "@/shared/lib/api/http";
+import { ensureApiUserFor } from "@/features/auth/services/apiAccountService";
 import type { ClientProfile } from "@/shared/types/domain";
-import { onlyDigits } from "@/shared/utils/format";
 import type { ApiUser, ApiVehicle, NewVehicleInput } from "../types";
 
 /**
- * Garante que o cliente exista na API (`GET /usuarios/me`; se 404, `POST /usuarios` com os dados do perfil).
- * Necessário porque o cadastro do web grava apenas no Firebase. Observação: a API ainda usa uma identidade
- * simulada no servidor (app.mock.firebase-id), então todos os logins compartilham o mesmo usuário da API.
+ * Garante que o cliente exista na API: `GET /usuarios/me` e, se 404, `POST /usuarios` com os dados do perfil
+ * (mesma regra do mobile; ver `features/auth/utils/apiUserSync.ts`). O usuário também é criado logo após o
+ * cadastro; esta chamada repara os casos em que a API estava fora do ar nesse momento. A identidade na API é o
+ * UID do Firebase validado pelo ID token (cada conta tem o seu usuário).
  */
-export async function ensureApiUser(profile: ClientProfile | null, email: string | null): Promise<ApiUser> {
-  try {
-    return await apiRequest<ApiUser>("/usuarios/me");
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 404) throw error;
-    if (!profile || !email) {
-      throw new ApiError(404, "Seu cadastro ainda não existe na API e o perfil local está incompleto.");
-    }
-    return apiRequest<ApiUser>("/usuarios", {
-      method: "POST",
-      body: {
-        nome: profile.firstName,
-        sobrenome: profile.lastName,
-        email,
-        telefone: onlyDigits(profile.phone),
-        uf: profile.state,
-        tipo: "CLIENTE",
-      },
-    });
-  }
+export function ensureApiUser(profile: ClientProfile | null, email: string | null): Promise<ApiUser> {
+  const create =
+    profile && email
+      ? { nome: profile.firstName, sobrenome: profile.lastName, email, telefone: profile.phone, uf: profile.state }
+      : null;
+  return ensureApiUserFor("CLIENTE", create);
 }
 
 /** `GET /api/v1/veiculos/me` */

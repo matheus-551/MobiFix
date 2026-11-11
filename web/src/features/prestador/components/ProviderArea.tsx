@@ -33,9 +33,19 @@ function ProviderProviders({ children }: { children: ReactNode }) {
   );
 }
 
-/** Área autenticada do prestador: guarda de rota + contexto do perfil + layout (sidebar e cabeçalho). */
+/**
+ * Área autenticada do prestador: guarda de rota + contexto do perfil + layout (sidebar e cabeçalho).
+ * Usada por `src/app/prestador/layout.tsx`, portanto cobre /prestador e TODAS as páginas abaixo dela.
+ */
 export function ProviderArea({ children }: { children: ReactNode }) {
   return (
+    // ================================================
+    // AUTENTICAÇÃO E PROTEÇÃO DE ROTAS
+    // ================================================
+    // <RequireAuth> é o guard que bloqueia /prestador/** para quem não está autenticado.
+    // Para DESATIVAR temporariamente: use a chave em `features/auth/config/routeProtection.ts`
+    // (recomendado) ou remova este wrapper (manter só <ProviderProviders>).
+    // ATENÇÃO: isso NÃO libera os endpoints protegidos da API; ver comentário em RouteGuards.tsx.
     <RequireAuth role="provider">
       <ProviderProviders>{children}</ProviderProviders>
     </RequireAuth>

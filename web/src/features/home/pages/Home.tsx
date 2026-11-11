@@ -187,12 +187,13 @@ export default function Home() {
               </select>
             </div>
 
-            <button
-              type="button"
+            {/* Área do cliente é privada: visitante é levado ao login pelo guard (RouteGuards.tsx). */}
+            <Link
+              href={routes.clientSearch}
               className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-7 py-3 text-sm font-bold text-white transition hover:bg-orange-600"
             >
               🔍 Buscar
-            </button>
+            </Link>
           </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
@@ -200,13 +201,13 @@ export default function Home() {
               Buscas populares:
             </span>
             {vehicles.map((vehicle) => (
-              <button
-                type="button"
+              <Link
+                href={routes.clientSearch}
                 key={vehicle.name}
-                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-gray-700 transition hover:bg-orange-100"
+                className="inline-block rounded-full bg-white px-4 py-2 text-xs font-semibold text-gray-700 transition hover:bg-orange-100"
               >
                 {vehicle.icon} {vehicle.name}
-              </button>
+              </Link>
             ))}
           </div>
         </div>
@@ -270,8 +271,8 @@ export default function Home() {
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {vehicles.map((vehicle) => (
-              <button
-                type="button"
+              <Link
+                href={routes.clientSearch}
                 key={vehicle.name}
                 className="flex flex-col items-center rounded-xl border border-gray-100 bg-white px-4 py-7 text-center transition hover:border-orange-200 hover:shadow-md"
               >
@@ -284,7 +285,7 @@ export default function Home() {
                 <span className="mt-2 text-xs leading-5 text-gray-500">
                   {vehicle.description}
                 </span>
-              </button>
+              </Link>
             ))}
           </div>
         </div>
@@ -333,12 +334,12 @@ export default function Home() {
                     📍 {provider.location}
                   </p>
 
-                  <button
-                    type="button"
+                  <Link
+                    href={routes.clientSearch}
                     className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-600"
                   >
                     Ver perfil e agendar <span>↗</span>
-                  </button>
+                  </Link>
                 </div>
               </article>
             ))}

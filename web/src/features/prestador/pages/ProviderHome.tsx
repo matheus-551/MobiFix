@@ -9,12 +9,12 @@ import { FeatureUnavailable, PageTitle, StatCard } from "../components/ProviderU
 
 const APPROVAL_TEXT: Record<ProviderApprovalStatus, { title: string; detail: string }> = {
   under_review: {
-    title: "Documentos em análise",
-    detail: "Nossa equipe está analisando seus documentos. Você será avisado quando o perfil for aprovado.",
+    title: "Cadastro em análise",
+    detail: "Nossa equipe está analisando seu cadastro. Você será avisado quando o perfil for aprovado.",
   },
   changes_requested: {
     title: "Ajustes solicitados",
-    detail: "A equipe pediu ajustes no seu cadastro. Entre em contato com o suporte para enviar novos documentos.",
+    detail: "A equipe pediu ajustes no seu cadastro. Entre em contato com o suporte para mais detalhes.",
   },
   rejected: {
     title: "Cadastro não aprovado",
@@ -34,7 +34,7 @@ export default function ProviderHome() {
   // Etapas distintas: o cadastro já foi enviado; análise e aprovação dependem do status do perfil.
   const steps = [
     { label: "Cadastro enviado", done: true },
-    { label: "Análise documental", done: approved || profile?.approvalStatus === "rejected" },
+    { label: "Análise do cadastro", done: approved || profile?.approvalStatus === "rejected" },
     { label: "Aprovação profissional", done: approved },
   ];
 
@@ -112,7 +112,6 @@ export default function ProviderHome() {
             <Item label="Telefone" value={profile.phone} />
             <Item label="Localização" value={`${profile.city} - ${profile.state}`} />
             <Item label="Endereço" value={profile.address} />
-            <Item label="Documentos enviados" value={String(profile.documents.length)} />
           </dl>
         </section>
       )}
