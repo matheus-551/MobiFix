@@ -11,6 +11,6 @@
     "types": ["node"],
     "isolatedModules": false
   },
-  "include": ["src/features/auth/utils/*.ts"],
+  "include": ["src/features/auth/utils/*.ts", "src/features/auth/config/routeProtection.ts", "src/shared/utils/flags.ts", "src/shared/utils/timeout.ts", "src/shared/lib/api/publicRoutes.ts", "src/shared/lib/api/ApiError.ts"],
   "exclude": ["node_modules"]
 }

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "rules:email": "node geradores/aplicarVerificacaoEmail.mjs",
     "test:auth": "tsc -p tsconfig.test.json && node --test .test-build/features/auth/utils/authUtils.test.js"
   },
   "dependencies": {
