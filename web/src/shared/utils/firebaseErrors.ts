@@ -1,5 +1,6 @@
 import { FirebaseError } from "firebase/app";
 import { FirebaseConfigError } from "../lib/firebase/config";
+import { TimeoutError } from "./timeout";
 
 const MESSAGES: Record<string, string> = {
   "auth/invalid-credential": "E-mail ou senha incorretos.",
@@ -20,6 +21,14 @@ const MESSAGES: Record<string, string> = {
   "auth/requires-recent-login": "Por segurança, entre novamente para continuar.",
   "auth/operation-not-allowed": "O login por e-mail e senha não está habilitado no Firebase.",
   "auth/unauthorized-continue-uri": "O domínio deste site não está autorizado no Firebase Authentication.",
+  "auth/unauthorized-domain":
+    "O domínio deste site não está autorizado no Firebase Authentication. Adicione-o em Authentication → Configurações → Domínios autorizados.",
+  "auth/invalid-api-key":
+    "A chave de API do Firebase é inválida. Confira NEXT_PUBLIC_FIREBASE_API_KEY no .env.local e reinicie o servidor.",
+  "auth/api-key-not-valid.-please-pass-a-valid-api-key.":
+    "A chave de API do Firebase é inválida. Confira NEXT_PUBLIC_FIREBASE_API_KEY no .env.local e reinicie o servidor.",
+  "auth/configuration-not-found":
+    "O Firebase Authentication ainda não foi configurado neste projeto. Ative-o no Firebase Console.",
   "permission-denied": "Você não tem permissão para realizar esta operação.",
   unavailable: "Serviço temporariamente indisponível. Tente novamente em instantes.",
   "storage/unauthorized": "Não foi possível enviar o documento: permissão negada.",
@@ -30,6 +39,7 @@ const MESSAGES: Record<string, string> = {
 /** Converte erros do Firebase (e de configuração) em mensagens amigáveis em português. */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof FirebaseConfigError) return error.message;
+  if (error instanceof TimeoutError) return error.message;
   if (error instanceof FirebaseError) {
     return MESSAGES[error.code] ?? "Não foi possível concluir a operação. Tente novamente.";
   }
