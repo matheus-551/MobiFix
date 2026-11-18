@@ -13,6 +13,7 @@ import br.com.edu.ifpe.mobifix.api.agenda.domain.model.HorarioAtendimento;
 import br.com.edu.ifpe.mobifix.api.agenda.domain.port.HorarioAtendimentoRepository;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.Agendamentos;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.CriarAgendamentoCommand;
+import br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.persistence.initializer.AgendamentoSchemaInitializer;
 import br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.persistence.repository.AgendamentoJpaRepository;
 import br.com.edu.ifpe.mobifix.api.catalogo.domain.port.EspecialidadeRepository;
 import br.com.edu.ifpe.mobifix.api.catalogo.domain.port.TipoVeiculoRepository;
@@ -26,11 +27,14 @@ import br.com.edu.ifpe.mobifix.api.usuario.domain.port.UsuarioRepository;
 import br.com.edu.ifpe.mobifix.api.veiculo.domain.model.Veiculo;
 import br.com.edu.ifpe.mobifix.api.veiculo.domain.port.VeiculoRepository;
 
+import jakarta.persistence.EntityManager;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -59,6 +63,12 @@ class AgendamentoPostgresTest {
     @Autowired EspecialidadeRepository especialidades;
     @Autowired WebApplicationContext context;
     @MockitoBean VerificadorTokenFirebase verificador;
+
+    @Autowired private EntityManager entityManager;
+
+    @Autowired private JdbcTemplate jdbc;
+
+    @Autowired private AgendamentoSchemaInitializer indice;
 
     private MockMvc mvc;
 
@@ -179,7 +189,7 @@ class AgendamentoPostgresTest {
     }
 
     @Test
-    void halOfereceNavegacaoSemAcoesFuturasEPaginaVaziaNomeada() throws Exception {
+    void halOfereceAcoesPermitidasEPaginaVaziaNomeada() throws Exception {
         mvc.perform(
                         post("/api/v1/agendamentos")
                                 .header("Authorization", "Bearer cliente")
@@ -189,7 +199,7 @@ class AgendamentoPostgresTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$._links.self").exists())
                 .andExpect(jsonPath("$._links.collection").exists())
-                .andExpect(jsonPath("$._links.cancelar").doesNotExist())
+                .andExpect(jsonPath("$._links.cancelar").exists())
                 .andExpect(jsonPath("$._links.confirmar").doesNotExist());
         mvc.perform(
                         get("/api/v1/agendamentos/me")
@@ -399,5 +409,152 @@ class AgendamentoPostgresTest {
                         jsonPath(
                                         "$.paths['/api/v1/agendamentos/me'].get.responses['200'].content['application/hal+json'].schema.properties._embedded.properties.agendamentos")
                                 .exists());
+    }
+
+    @Test
+    void confirmarCancelarEReagendarPreservaAuditoriaELiberaVaga() throws Exception {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/confirmar", reserva.id())
+                                .header("Authorization", "Bearer prestador")
+                                .accept("application/hal+json"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMADO"))
+                .andExpect(jsonPath("$.confirmadoPor").value(profissional.id().toString()))
+                .andExpect(jsonPath("$.confirmadoEm").isNotEmpty())
+                .andExpect(jsonPath("$._links.confirmar").doesNotExist())
+                .andExpect(jsonPath("$._links.cancelar").exists());
+
+        assertEquals(1, reservas.countByHorario_Id(horario.id()));
+
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/cancelar", reserva.id())
+                                .header("Authorization", "Bearer cliente")
+                                .accept("application/hal+json"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELADO"))
+                .andExpect(jsonPath("$.canceladoPor").value(cliente.id().toString()))
+                .andExpect(jsonPath("$.confirmadoPor").value(profissional.id().toString()))
+                .andExpect(jsonPath("$._links.cancelar").doesNotExist());
+
+        assertEquals(0, reservas.countByHorario_Id(horario.id()));
+        assertEquals(
+                3,
+                agenda.listarPublicos(perfil.id(), horario.data(), horario.data())
+                        .getFirst()
+                        .vagasDisponiveis());
+
+        var nova = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+
+        assertNotEquals(reserva.id(), nova.id());
+        assertEquals(2, agendamentos.listarMeus(cliente.firebaseId(), 0, 20).totalElements());
+        assertEquals(
+                "CANCELADO",
+                agendamentos.consultar(cliente.firebaseId(), reserva.id()).status().name());
+    }
+
+    @Test
+    void acoesRespeitamPermissoesEstadoEPrazo() throws Exception {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+
+        mvc.perform(patch("/api/v1/agendamentos/{id}/confirmar", reserva.id()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/confirmar", reserva.id())
+                                .header("Authorization", "Bearer cliente"))
+                .andExpect(status().isForbidden());
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/cancelar", reserva.id())
+                                .header("Authorization", "Bearer outro"))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        get("/api/v1/agendamentos/{id}", reserva.id())
+                                .header("Authorization", "Bearer prestador")
+                                .accept("application/hal+json"))
+                .andExpect(jsonPath("$._links.confirmar").exists());
+
+        agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/confirmar", reserva.id())
+                                .header("Authorization", "Bearer prestador"))
+                .andExpect(status().isConflict());
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/concluir", reserva.id())
+                                .header("Authorization", "Bearer prestador"))
+                .andExpect(status().is(422));
+
+        agendamentos.cancelar(profissional.firebaseId(), reserva.id());
+
+        assertEquals(
+                profissional.id(),
+                agendamentos.consultar(cliente.firebaseId(), reserva.id()).canceladoPor());
+
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/cancelar", reserva.id())
+                                .header("Authorization", "Bearer cliente"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void concluirPreservaHistoricoENaoPermiteCancelarAposInicio() throws Exception {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+        agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+        var ontem = LocalDate.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
+
+        // Simula a passagem do tempo sem adicionar configurações de relógio ao contexto inteiro.
+        jdbc.update("update agendamento set data = ? where id = ?", ontem, reserva.id());
+        jdbc.update("update horario_atendimento set data = ? where id = ?", ontem, horario.id());
+        entityManager.clear();
+
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/cancelar", reserva.id())
+                                .header("Authorization", "Bearer cliente"))
+                .andExpect(status().is(422));
+        mvc.perform(
+                        get("/api/v1/agendamentos/{id}", reserva.id())
+                                .header("Authorization", "Bearer prestador")
+                                .accept("application/hal+json"))
+                .andExpect(jsonPath("$._links.concluir").exists())
+                .andExpect(jsonPath("$._links.cancelar").doesNotExist());
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/concluir", reserva.id())
+                                .header("Authorization", "Bearer prestador"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONCLUIDO"))
+                .andExpect(jsonPath("$.concluidoPor").value(profissional.id().toString()))
+                .andExpect(jsonPath("$.confirmadoPor").value(profissional.id().toString()))
+                .andExpect(jsonPath("$.concluidoEm").isNotEmpty());
+
+        assertEquals(0, reservas.countByHorario_Id(horario.id()));
+
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/concluir", reserva.id())
+                                .header("Authorization", "Bearer prestador"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void ajusteDoIndicePreservaReservasExistentesEPodeRepetir() {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+
+        jdbc.execute(
+                "alter table agendamento add constraint uk_agendamento_veiculo_data_hora unique"
+                    + " (veiculo_id, data, hora_inicio)");
+        jdbc.execute("alter table agendamento drop constraint if exists agendamento_status_check");
+        jdbc.execute(
+                "alter table agendamento add constraint agendamento_status_check check (status in"
+                    + " ('PENDENTE'))");
+        indice.afterSingletonsInstantiated();
+        indice.afterSingletonsInstantiated();
+
+        assertEquals(reserva.id(), agendamentos.consultar(cliente.firebaseId(), reserva.id()).id());
+
+        agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+        agendamentos.cancelar(cliente.firebaseId(), reserva.id());
+        var nova = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+
+        assertNotEquals(reserva.id(), nova.id());
     }
 }
