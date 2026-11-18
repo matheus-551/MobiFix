@@ -541,11 +541,11 @@ class AgendamentoPostgresTest {
 
         jdbc.execute(
                 "alter table agendamento add constraint uk_agendamento_veiculo_data_hora unique"
-                    + " (veiculo_id, data, hora_inicio)");
+                        + " (veiculo_id, data, hora_inicio)");
         jdbc.execute("alter table agendamento drop constraint if exists agendamento_status_check");
         jdbc.execute(
                 "alter table agendamento add constraint agendamento_status_check check (status in"
-                    + " ('PENDENTE'))");
+                        + " ('PENDENTE'))");
         indice.afterSingletonsInstantiated();
         indice.afterSingletonsInstantiated();
 
@@ -556,5 +556,190 @@ class AgendamentoPostgresTest {
         var nova = agendamentos.criar(cliente.firebaseId(), command(veiculo));
 
         assertNotEquals(reserva.id(), nova.id());
+    }
+
+    @Test
+    void remarcacaoTransfereVagaPreservaIdentidadeEAuditoria() throws Exception {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+        entityManager.flush();
+        entityManager.clear();
+        reserva = agendamentos.consultar(cliente.firebaseId(), reserva.id());
+        var destino =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(
+                                horario.data().plusDays(1), LocalTime.of(15, 0), 1));
+        String rota = "/api/v1/agendamentos/" + reserva.id();
+        String corpo = "{\"horarioId\":\"" + destino.id() + "\"}";
+
+        mvc.perform(
+                        get(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .accept("application/hal+json"))
+                .andExpect(
+                        jsonPath("$._links.remarcar.href")
+                                .value("http://localhost" + rota + "/remarcar"));
+        mvc.perform(
+                        get(rota)
+                                .header("Authorization", "Bearer prestador")
+                                .accept("application/hal+json"))
+                .andExpect(jsonPath("$._links.remarcar").doesNotExist());
+        mvc.perform(
+                        patch(rota + "/remarcar")
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content(corpo)
+                                .accept("application/hal+json"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(reserva.id().toString()))
+                .andExpect(jsonPath("$.horarioId").value(destino.id().toString()))
+                .andExpect(jsonPath("$.data").value(destino.data().toString()))
+                .andExpect(jsonPath("$.status").value("PENDENTE"))
+                .andExpect(jsonPath("$.remarcadoPor").value(cliente.id().toString()))
+                .andExpect(jsonPath("$.remarcadoEm").isNotEmpty());
+        entityManager.flush();
+        entityManager.clear();
+
+        var atual = agendamentos.consultar(cliente.firebaseId(), reserva.id());
+        assertEquals(reserva.veiculoId(), atual.veiculoId());
+        assertEquals(reserva.especialidadeId(), atual.especialidadeId());
+        assertEquals(reserva.prestadorId(), atual.prestadorId());
+        assertEquals(reserva.criadoEm(), atual.criadoEm());
+        assertEquals(0, reservas.countByHorario_Id(horario.id()));
+        assertEquals(1, reservas.countByHorario_Id(destino.id()));
+        assertEquals(
+                3,
+                agenda.listarPublicos(perfil.id(), horario.data(), horario.data())
+                        .getFirst()
+                        .vagasDisponiveis());
+        assertTrue(agenda.listarPublicos(perfil.id(), destino.data(), destino.data()).isEmpty());
+        assertEquals(
+                atual.remarcadoEm(),
+                agendamentos
+                        .remarcar(cliente.firebaseId(), reserva.id(), destino.id())
+                        .remarcadoEm());
+
+        var confirmado = agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+        assertEquals(atual.remarcadoEm(), confirmado.remarcadoEm());
+        assertEquals(cliente.id(), confirmado.remarcadoPor());
+        mvc.perform(
+                        get(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .accept("application/hal+json"))
+                .andExpect(jsonPath("$._links.remarcar").doesNotExist());
+        mvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.paths['/api/v1/agendamentos/{id}/remarcar'].patch.summary")
+                                .value("Remarcar agendamento"))
+                .andExpect(
+                        jsonPath(
+                                        "$.paths['/api/v1/agendamentos/{id}/remarcar'].patch.requestBody.content['application/json'].example.horarioId")
+                                .exists());
+    }
+
+    @Test
+    void remarcacaoRecusadaMantemReservaEVagasOriginais() throws Exception {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+        var destino =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(horario.data(), LocalTime.of(14, 0), 1));
+        var ocupante =
+                agendamentos.criar(
+                        outro.firebaseId(),
+                        new CriarAgendamentoCommand(
+                                carro(outro).id(), destino.id(), especialidade));
+        String rota = "/api/v1/agendamentos/" + reserva.id() + "/remarcar";
+        String corpo = "{\"horarioId\":\"" + destino.id() + "\"}";
+
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content(corpo))
+                .andExpect(status().isConflict());
+        agendamentos.cancelar(outro.firebaseId(), ocupante.id());
+        agenda.atualizar(
+                profissional.firebaseId(), destino.id(), new AtualizarHorarioCommand(1, true));
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content(corpo))
+                .andExpect(status().is(422));
+        var segundoPrestador = conta(TipoUsuario.PRESTADOR);
+        perfil(segundoPrestador);
+        var horarioAlheio =
+                agenda.criar(
+                        segundoPrestador.firebaseId(),
+                        new CriarHorarioCommand(horario.data(), LocalTime.of(15, 0), 1));
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content("{\"horarioId\":\"" + horarioAlheio.id() + "\"}"))
+                .andExpect(status().is(422));
+
+        entityManager.flush();
+        entityManager.clear();
+        var preservado = agendamentos.consultar(cliente.firebaseId(), reserva.id());
+        assertEquals(reserva.horarioId(), preservado.horarioId());
+        assertNull(preservado.remarcadoEm());
+        assertEquals(1, reservas.countByHorario_Id(horario.id()));
+        assertEquals(0, reservas.countByHorario_Id(destino.id()));
+    }
+
+    @Test
+    void remarcacaoExigeClienteResponsavelPendenteAntesDoInicio() throws Exception {
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo));
+        var destino =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(horario.data(), LocalTime.of(14, 0), 1));
+        String rota = "/api/v1/agendamentos/" + reserva.id() + "/remarcar";
+        String corpo = "{\"horarioId\":\"" + destino.id() + "\"}";
+
+        mvc.perform(patch(rota).contentType("application/json").content(corpo))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer outro")
+                                .contentType("application/json")
+                                .content(corpo))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer prestador")
+                                .contentType("application/json")
+                                .content(corpo))
+                .andExpect(status().isForbidden());
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+        mvc.perform(
+                        patch(rota)
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content(corpo))
+                .andExpect(status().isConflict());
+        var pendente = agendamentos.criar(cliente.firebaseId(), command(carro(cliente)));
+        jdbc.update(
+                "update agendamento set data = ? where id = ?",
+                horario.data().minusDays(4),
+                pendente.id());
+        entityManager.clear();
+        mvc.perform(
+                        patch("/api/v1/agendamentos/{id}/remarcar", pendente.id())
+                                .header("Authorization", "Bearer cliente")
+                                .contentType("application/json")
+                                .content(corpo))
+                .andExpect(status().is(422));
+        assertEquals(0, reservas.countByHorario_Id(destino.id()));
     }
 }

@@ -302,4 +302,137 @@ class AgendamentoConcorrenciaPostgresTest {
         }
         for (UUID id : contasCriadas) jdbc.update("delete from usuario where id = ?", id);
     }
+
+    private String remarcar(Usuario cliente, UUID reservaId, HorarioAtendimento destino) {
+        try {
+            agendamentos.remarcar(cliente.firebaseId(), reservaId, destino.id());
+            return "remarcado";
+        } catch (ConflitoAgendamentoException exception) {
+            return "conflito";
+        }
+    }
+
+    @Test
+    void duasRemarcacoesDisputamUltimaVagaSemPerderAReservaRecusada() throws Exception {
+        var profissional = prestador();
+        var origem = horario(profissional, 2);
+        var destino =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(dia, LocalTime.of(14, 0), 1));
+        var primeiro = conta(TipoUsuario.CLIENTE);
+        var segundo = conta(TipoUsuario.CLIENTE);
+        var primeiraReserva =
+                agendamentos.criar(primeiro.firebaseId(), command(carro(primeiro), origem));
+        var segundaReserva =
+                agendamentos.criar(segundo.firebaseId(), command(carro(segundo), origem));
+
+        var resultados =
+                simultaneos(
+                        List.of(
+                                () -> remarcar(primeiro, primeiraReserva.id(), destino),
+                                () -> remarcar(segundo, segundaReserva.id(), destino)));
+
+        assertEquals(1, Collections.frequency(resultados, "remarcado"));
+        assertEquals(1, Collections.frequency(resultados, "conflito"));
+        assertEquals(1, reservas.countByHorario_Id(origem.id()));
+        assertEquals(1, reservas.countByHorario_Id(destino.id()));
+        assertNotEquals(
+                agendamentos.consultar(primeiro.firebaseId(), primeiraReserva.id()).horarioId(),
+                agendamentos.consultar(segundo.firebaseId(), segundaReserva.id()).horarioId());
+    }
+
+    @Test
+    void remarcacoesEmSentidosOpostosNaoEntramEmImpasse() throws Exception {
+        var profissional = prestador();
+        var primeiroHorario = horario(profissional, 2);
+        var segundoHorario =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(dia, LocalTime.of(14, 0), 2));
+        var primeiro = conta(TipoUsuario.CLIENTE);
+        var segundo = conta(TipoUsuario.CLIENTE);
+        var primeiraReserva =
+                agendamentos.criar(
+                        primeiro.firebaseId(), command(carro(primeiro), primeiroHorario));
+        var segundaReserva =
+                agendamentos.criar(segundo.firebaseId(), command(carro(segundo), segundoHorario));
+
+        var resultados =
+                simultaneos(
+                        List.of(
+                                () -> remarcar(primeiro, primeiraReserva.id(), segundoHorario),
+                                () -> remarcar(segundo, segundaReserva.id(), primeiroHorario)));
+
+        assertEquals(List.of("remarcado", "remarcado"), resultados);
+        assertEquals(
+                segundoHorario.id(),
+                agendamentos.consultar(primeiro.firebaseId(), primeiraReserva.id()).horarioId());
+        assertEquals(
+                primeiroHorario.id(),
+                agendamentos.consultar(segundo.firebaseId(), segundaReserva.id()).horarioId());
+        assertEquals(1, reservas.countByHorario_Id(primeiroHorario.id()));
+        assertEquals(1, reservas.countByHorario_Id(segundoHorario.id()));
+    }
+
+    @Test
+    void confirmarDuranteRemarcacaoPreservaHorarioEAuditoriaAtuais() throws Exception {
+        var profissional = prestador();
+        var origem = horario(profissional, 1);
+        var destino =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(dia, LocalTime.of(14, 0), 1));
+        var cliente = conta(TipoUsuario.CLIENTE);
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(carro(cliente), origem));
+
+        var resultados =
+                simultaneos(
+                        List.of(
+                                () -> remarcar(cliente, reserva.id(), destino),
+                                () -> {
+                                    agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+                                    return "confirmado";
+                                }));
+
+        var atual = agendamentos.consultar(cliente.firebaseId(), reserva.id());
+        assertEquals("CONFIRMADO", atual.status().name());
+        assertEquals(profissional.id(), atual.confirmadoPor());
+        assertEquals(
+                resultados.contains("remarcado") ? destino.id() : origem.id(), atual.horarioId());
+        assertEquals(1, reservas.countByHorario_Id(atual.horarioId()));
+        assertEquals(
+                1,
+                reservas.countByHorario_Id(origem.id()) + reservas.countByHorario_Id(destino.id()));
+        if (resultados.contains("remarcado")) {
+            assertEquals(cliente.id(), atual.remarcadoPor());
+            assertNotNull(atual.remarcadoEm());
+        }
+    }
+
+    @Test
+    void cancelarDuranteRemarcacaoNaoRestauraReservaNemOcupaVaga() throws Exception {
+        var profissional = prestador();
+        var origem = horario(profissional, 1);
+        var destino =
+                agenda.criar(
+                        profissional.firebaseId(),
+                        new CriarHorarioCommand(dia, LocalTime.of(14, 0), 1));
+        var cliente = conta(TipoUsuario.CLIENTE);
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(carro(cliente), origem));
+
+        simultaneos(
+                List.of(
+                        () -> remarcar(cliente, reserva.id(), destino),
+                        () -> {
+                            agendamentos.cancelar(profissional.firebaseId(), reserva.id());
+                            return "cancelado";
+                        }));
+
+        var atual = agendamentos.consultar(cliente.firebaseId(), reserva.id());
+        assertEquals("CANCELADO", atual.status().name());
+        assertEquals(profissional.id(), atual.canceladoPor());
+        assertEquals(0, reservas.countByHorario_Id(origem.id()));
+        assertEquals(0, reservas.countByHorario_Id(destino.id()));
+    }
 }
