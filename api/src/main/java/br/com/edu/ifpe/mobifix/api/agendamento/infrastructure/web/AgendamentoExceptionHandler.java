@@ -79,8 +79,6 @@ public class AgendamentoExceptionHandler {
         throw exception;
     }
 
-    public record ErroCampo(String field, String message) {}
-
     @ExceptionHandler(PermissaoAgendamentoException.class)
     public ProblemDetail permissao(PermissaoAgendamentoException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, exception.getMessage());
