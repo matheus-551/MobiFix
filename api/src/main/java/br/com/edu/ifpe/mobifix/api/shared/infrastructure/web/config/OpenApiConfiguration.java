@@ -293,7 +293,7 @@ public class OpenApiConfiguration {
                     if ("AgendamentoResponse".equals(nome) && "status".equals(campo)) {
                         propriedade.setDescription(
                                 "Estado da reserva: PENDENTE, CONFIRMADO, CANCELADO ou CONCLUIDO."
-                                    + " PENDENTE e CONFIRMADO ocupam vaga.");
+                                        + " PENDENTE e CONFIRMADO ocupam vaga.");
                         propriedade.setExample("PENDENTE");
                     }
                     if (nome.endsWith("Response")
@@ -401,6 +401,9 @@ public class OpenApiConfiguration {
 
     private String resumo(String path, PathItem.HttpMethod method) {
         if (path.contains("agendamentos")) {
+            if (path.endsWith("/remarcar")) {
+                return "Remarcar agendamento";
+            }
             if (path.endsWith("/confirmar")) {
                 return "Confirmar agendamento";
             }
@@ -468,12 +471,18 @@ public class OpenApiConfiguration {
                     + " prestador envolvido, PENDENTE ou CONFIRMADO antes do início; libera vaga e"
                     + " permite nova reserva do veículo, preservando histórico. Conclusão: somente"
                     + " prestador, CONFIRMADO a partir do início. Horário no fuso"
-                    + " America/Sao_Paulo. Cada ação é PATCH sem corpo e registra responsável e"
-                    + " instante. Repetições e transições inválidas retornam 409; prazo inválido"
-                    + " retorna 422; ação de prestador por cliente retorna 403; outra conta recebe"
-                    + " 404. A listagem inclui todos os estados e usa data, hora e ID em ordem"
-                    + " crescente. Em HAL, os links de ação dependem da conta, do estado e do"
-                    + " horário; execute-os por PATCH. Remarcação não está disponível.";
+                    + " America/Sao_Paulo. Confirmar, cancelar e concluir são PATCH sem corpo e"
+                    + " registram responsável e instante. Repetições e transições inválidas"
+                    + " retornam 409; prazo inválido retorna 422; ação de prestador por cliente"
+                    + " retorna 403; outra conta recebe 404. A listagem inclui todos os estados e"
+                    + " usa data, hora e ID em ordem crescente. Em HAL, os links de ação dependem"
+                    + " da conta, do estado e do horário; execute-os por PATCH. Remarcar recebe"
+                    + " horarioId no corpo: somente o cliente responsável, PENDENTE antes do"
+                    + " início, para outro horário futuro, aberto e com vaga no mesmo prestador."
+                    + " Preserva ID, veículo e especialidade. A transferência é atômica; falhas"
+                    + " mantêm a reserva original. Repetir o horário atual retorna 200 sem alterar"
+                    + " ocupação nem auditoria. remarcadoEm e remarcadoPor registram somente a"
+                    + " última remarcação.";
         }
         if (path.contains("tipos-veiculo") || path.contains("especialidades")) {
             return base
@@ -592,9 +601,9 @@ public class OpenApiConfiguration {
 
     private String descricaoCampo(String campo) {
         return switch (campo) {
-            case "confirmadoEm", "canceladoEm", "concluidoEm" ->
+            case "confirmadoEm", "canceladoEm", "concluidoEm", "remarcadoEm" ->
                     "Instante UTC da ação, registrado pelo servidor; nulo enquanto não realizada.";
-            case "confirmadoPor", "canceladoPor", "concluidoPor" ->
+            case "confirmadoPor", "canceladoPor", "concluidoPor", "remarcadoPor" ->
                     "UUID interno da conta responsável pela ação; preenchido pelo servidor.";
             case "id" -> "Identificador gerado pelo sistema.";
             case "tipoVeiculoId", "tiposVeiculoIds" ->
@@ -610,7 +619,7 @@ public class OpenApiConfiguration {
                             + " reservas. Não pode ser inferior às vagas ocupadas.";
             case "vagasDisponiveis" ->
                     "Capacidade total menos as vagas ocupadas por reservas PENDENTES e"
-                        + " CONFIRMADAS.";
+                            + " CONFIRMADAS.";
             case "bloqueado" ->
                     "Quando verdadeiro, o horário não aparece na disponibilidade pública.";
             case "ativo" -> "Estado da conta; não pode ser alterado pelo PUT de dados pessoais.";
@@ -693,6 +702,9 @@ public class OpenApiConfiguration {
     }
 
     private Object exemplo(String path, PathItem.HttpMethod method) {
+        if (path.endsWith("/remarcar")) {
+            return Map.of("horarioId", "550e8400-e29b-41d4-a716-446655440301");
+        }
         if (path.contains("agendamentos")) {
             return method == PathItem.HttpMethod.POST
                     ? Map.of(

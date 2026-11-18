@@ -61,4 +61,10 @@ public class AgendamentosTransacionais implements Agendamentos {
     public Agendamento concluir(String firebaseId, UUID id) {
         return regras.concluir(firebaseId, id);
     }
+
+    @Override
+    @Transactional
+    public Agendamento remarcar(String firebaseId, UUID id, UUID horarioId) {
+        return regras.remarcar(firebaseId, id, horarioId);
+    }
 }

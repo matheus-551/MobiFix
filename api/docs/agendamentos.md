@@ -1,6 +1,6 @@
 # Agendamentos: criação e consultas
 
-As reservas nascem **PENDENTE** e podem ser confirmadas, canceladas ou concluídas pelas regras abaixo. PENDENTE e CONFIRMADO ocupam vaga. Duração de serviços e remarcação serão tratadas em etapas posteriores.
+As reservas nascem **PENDENTE** e podem ser confirmadas, canceladas ou concluídas pelas regras abaixo. PENDENTE e CONFIRMADO ocupam vaga. Remarcação mantém o estado PENDENTE. A duração de serviços não é considerada.
 
 ## Endpoints
 
@@ -11,6 +11,7 @@ As reservas nascem **PENDENTE** e podem ser confirmadas, canceladas ou concluíd
 | GET | `/api/v1/agendamentos/{id}` | Consulta restrita ao cliente e prestador envolvidos |
 | PATCH | `/api/v1/agendamentos/{id}/confirmar` | Prestador confirma um pendente antes do início |
 | PATCH | `/api/v1/agendamentos/{id}/cancelar` | Cliente ou prestador cancela pendente/confirmado antes do início |
+| PATCH | `/api/v1/agendamentos/{id}/remarcar` | Cliente responsável troca um horário pendente antes do início |
 | PATCH | `/api/v1/agendamentos/{id}/concluir` | Prestador conclui confirmado a partir do início |
 
 Todas as rotas exigem `Authorization: Bearer <ID token Firebase>`. O UID vem do token e o cliente não pode ser escolhido pelo corpo da requisição. Contas inativas não podem utilizar essas operações. Um prestador ativo sem agendamentos recebe uma página vazia.
@@ -25,7 +26,7 @@ Todas as rotas exigem `Authorization: Bearer <ID token Firebase>`. O UID vem do 
 
 Os IDs acima são ilustrativos. Obtenha os IDs reais por `/api/v1/veiculos/me`, pela consulta pública de horários e pelas especialidades do perfil público do prestador. O perfil deve atender tanto o tipo do veículo quanto a especialidade.
 
-O POST retorna `201`, o agendamento com seu ID, data, hora, vínculos, status e instante de criação, e o header `Location` da consulta individual. As ações PATCH não recebem corpo. A identidade e o instante da ação são definidos pelo servidor. Não há exclusão física nem remarcação. Após falha de conexão ou resposta perdida, consulte a listagem antes de repetir o POST; uma reserva já confirmada no banco pode gerar `409` na repetição.
+O POST retorna `201`, o agendamento com seu ID, data, hora, vínculos, status e instante de criação, e o header `Location` da consulta individual. Confirmar, cancelar e concluir não recebem corpo; remarcar recebe `horarioId`. A identidade e o instante da ação são definidos pelo servidor. Não há exclusão física. Após falha de conexão ou resposta perdida, consulte a listagem antes de repetir o POST; uma reserva já confirmada no banco pode gerar `409` na repetição.
 
 ## Regras e concorrência
 
@@ -44,7 +45,7 @@ As regras ficam em `agendamento/application`, sem dependências Spring. O adapte
 
 `page` começa em zero. `size` aceita 1 a 100, com padrão 20. A ordem é data, hora e ID em ordem crescente. A consulta sempre aplica o vínculo do usuário autenticado, inclusive antes de calcular os totais.
 
-Com `Accept: application/json`, a página possui `content`, `page`, `size`, `totalElements` e `totalPages`. Com `Accept: application/hal+json`, os itens ficam em `_embedded.agendamentos`, os metadados em `page` e a navegação em `_links`. Página vazia mantém o array nomeado. Os recursos HAL oferecem navegação e as ações permitidas para a conta, estado e instante atuais. Siga `confirmar`, `cancelar` e `concluir` por PATCH, não por GET. Os links não substituem as validações do backend.
+Com `Accept: application/json`, a página possui `content`, `page`, `size`, `totalElements` e `totalPages`. Com `Accept: application/hal+json`, os itens ficam em `_embedded.agendamentos`, os metadados em `page` e a navegação em `_links`. Página vazia mantém o array nomeado. Os recursos HAL oferecem navegação e as ações permitidas para a conta, estado e instante atuais. Siga `confirmar`, `cancelar`, `concluir` e `remarcar` por PATCH. Remarcar exige o novo `horarioId` no corpo. Os links não substituem as validações do backend.
 
 ## Erros
 
@@ -52,7 +53,7 @@ Com `Accept: application/json`, a página possui `content`, `page`, `size`, `tot
 | --- | --- |
 | 400 | Corpo, UUID, especialidade ou parâmetros de paginação inválidos |
 | 401 | Token ausente, inválido ou expirado |
-| 403 | Cliente tentando confirmar ou concluir um agendamento |
+| 403 | Cliente tentando confirmar/concluir ou prestador tentando remarcar |
 | 404 | Conta local ou recurso inexistente; veículo/agendamento não acessível ao usuário |
 | 409 | Horário lotado, duplicidade do veículo, transição de estado inválida ou conflito de gravação |
 | 422 | Conta inativa, tipo de conta inadequado, atendimento incompatível, horário passado/bloqueado ou capacidade abaixo das reservas |
@@ -93,7 +94,7 @@ Confirmação e cancelamento exigem instante estritamente anterior ao início. A
 
 As respostas incluem `confirmadoEm`/`confirmadoPor`, `canceladoEm`/`canceladoPor` e `concluidoEm`/`concluidoPor`. Os instantes são UTC e os responsáveis são IDs internos das contas. Os campos ficam nulos até a ação e o histórico anterior é preservado. A listagem mantém todos os estados.
 
-As alterações bloqueiam veículo, horário e agendamento, na mesma ordem usada pela criação, e recarregam o estado após obter o bloqueio. Assim, um cancelamento concorrente não pode ser sobrescrito por uma confirmação que tenha lido o estado antigo.
+As alterações bloqueiam o veículo, recarregam e bloqueiam o agendamento e só então bloqueiam seu horário atual. A remarcação bloqueia os dois horários em ordem de UUID, evitando impasses entre trocas opostas. A criação mantém a ordem cliente, veículo e horário. Assim, um cancelamento concorrente não pode ser sobrescrito por uma confirmação que tenha lido o estado antigo.
 
 ### Teste manual das ações
 
@@ -103,3 +104,34 @@ As alterações bloqueiam veículo, horário e agendamento, na mesma ordem usada
 4. Repita confirmação ou cancelamento em um estado incompatível: espere 409.
 5. Antes do início, tente concluir: espere 422. A partir do início, conclua um confirmado com o prestador: espere CONCLUIDO e auditoria, preservando os dados da confirmação.
 6. Confira os links HAL com os tokens de cliente e prestador e a documentação dos PATCH no Swagger.
+
+
+## Remarcação
+
+`PATCH /api/v1/agendamentos/{id}/remarcar` com o token do cliente responsável:
+
+```json
+{
+  "horarioId": "550e8400-e29b-41d4-a716-446655440301"
+}
+```
+
+O ID é ilustrativo. Escolha outro horário da disponibilidade pública do mesmo prestador. A resposta é 200 com o mesmo ID do agendamento, novo horário/data/hora e estado PENDENTE. Cliente, prestador, veículo, especialidade e instante de criação são preservados.
+
+- Somente PENDENTE e antes do início original. CONFIRMADO, CANCELADO e CONCLUIDO retornam 409.
+- Conta e veículo devem continuar ativos. O destino deve ser futuro, aberto e com vaga; o prestador deve continuar ativo e compatível com o veículo e a especialidade.
+- A troca é uma única transação. O horário anterior libera uma vaga e o novo passa a ocupá-la no commit. Qualquer falha mantém a reserva original; a resposta é 409 para lotação/conflito e 422 para horário bloqueado, passado, incompatível ou de outro prestador.
+- Reenviar o horário atual retorna 200 sem alterar a ocupação nem a auditoria, mesmo se o horário estiver lotado ou bloqueado. As regras de autorização, estado, conta/veículo ativos e prazo original continuam sendo verificadas.
+- `remarcadoEm` (UTC) e `remarcadoPor` (ID interno do cliente) registram apenas a última remarcação. Ficam nulos nos registros anteriores e são preservados nas ações posteriores. Não há histórico de cada troca.
+- O link HAL `remarcar` aparece somente para o cliente em um PENDENTE futuro. Escolha o destino e envie o corpo ao seguir o link.
+
+### Teste manual da remarcação
+
+1. Configure dois horários futuros do mesmo prestador, com vagas, em dias ou horas diferentes. Crie uma reserva no primeiro como cliente.
+2. Remarque para o segundo pelo Swagger. Confira ID e vínculos preservados, nova data/hora, auditoria do cliente, vaga recuperada na origem e ocupada no destino.
+3. Repita o mesmo destino: espere 200 e auditoria inalterada. Confirme depois como prestador e confira que a auditoria da remarcação permanece.
+4. Tente remarcar para horário cheio, bloqueado, passado ou de outro prestador. Confira erro e que a reserva e a ocupação originais permanecem.
+5. Tente com prestador (403), outra conta (404), sem token (401), corpo vazio (400), estado confirmado (409) e pendente cujo início já passou (422).
+6. Com duas reservas de clientes diferentes, dispute a última vaga do mesmo destino simultaneamente. Só uma troca deve ocorrer; a outra reserva continua na origem.
+
+Os testes PostgreSQL também verificam trocas em sentidos opostos e remarcação concorrente com confirmação/cancelamento, usando transações independentes.

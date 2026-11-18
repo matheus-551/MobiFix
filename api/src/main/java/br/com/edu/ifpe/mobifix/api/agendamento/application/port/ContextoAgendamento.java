@@ -25,4 +25,6 @@ public interface ContextoAgendamento {
             boolean ativo, TipoUsuario tipo, Set<Long> tiposVeiculo, Set<Long> especialidades) {}
 
     void bloquearVeiculo(UUID id);
+
+    HorarioAtendimento bloquearHorariosParaRemarcacao(UUID origem, UUID destino);
 }
