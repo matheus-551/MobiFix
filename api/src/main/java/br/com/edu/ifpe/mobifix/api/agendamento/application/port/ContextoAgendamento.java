@@ -23,4 +23,6 @@ public interface ContextoAgendamento {
 
     record Prestador(
             boolean ativo, TipoUsuario tipo, Set<Long> tiposVeiculo, Set<Long> especialidades) {}
+
+    void bloquearVeiculo(UUID id);
 }

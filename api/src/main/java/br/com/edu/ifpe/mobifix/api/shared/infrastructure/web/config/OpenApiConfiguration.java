@@ -292,7 +292,8 @@ public class OpenApiConfiguration {
                             && propriedade.get$ref() == null) propriedade.setExample(exemplo);
                     if ("AgendamentoResponse".equals(nome) && "status".equals(campo)) {
                         propriedade.setDescription(
-                                "Estado da reserva: PENDENTE. Já ocupa uma vaga nesta etapa.");
+                                "Estado da reserva: PENDENTE, CONFIRMADO, CANCELADO ou CONCLUIDO."
+                                    + " PENDENTE e CONFIRMADO ocupam vaga.");
                         propriedade.setExample("PENDENTE");
                     }
                     if (nome.endsWith("Response")
@@ -400,6 +401,15 @@ public class OpenApiConfiguration {
 
     private String resumo(String path, PathItem.HttpMethod method) {
         if (path.contains("agendamentos")) {
+            if (path.endsWith("/confirmar")) {
+                return "Confirmar agendamento";
+            }
+            if (path.endsWith("/cancelar")) {
+                return "Cancelar agendamento";
+            }
+            if (path.endsWith("/concluir")) {
+                return "Concluir agendamento";
+            }
             return method == PathItem.HttpMethod.POST
                     ? "Criar agendamento"
                     : path.endsWith("/me")
@@ -451,18 +461,19 @@ public class OpenApiConfiguration {
 
         if (path.contains("agendamentos")) {
             return base
-                    + "Exige conta ativa e ID token Firebase. Somente clientes criam reservas;"
-                    + " veículo e horário são UUIDs existentes e a especialidade é um ID positivo"
-                    + " atendido pelo prestador. O cliente é determinado pelo token. O agendamento"
-                    + " nasce PENDENTE e já ocupa uma vaga. Valida horário futuro no fuso"
-                    + " America/Sao_Paulo, bloqueio, capacidade, proprietário do veículo e"
-                    + " compatibilidade de atendimento. Um veículo não pode reservar o mesmo"
-                    + " instante em prestadores diferentes. Cliente e prestador envolvidos podem"
-                    + " consultar; outra conta recebe 404. A listagem usa data, hora e ID em ordem"
-                    + " crescente, page iniciado em zero e size de 1 a 100. Não existem"
-                    + " confirmação, cancelamento, conclusão ou mudança de horário nesta etapa. Em"
-                    + " caso de resposta perdida, consulte /agendamentos/me antes de repetir o"
-                    + " POST.";
+                    + "Exige conta ativa e ID token Firebase. Somente clientes criam reservas e o"
+                    + " veículo deve pertencer à conta autenticada. O prestador precisa atender o"
+                    + " veículo e a especialidade. PENDENTE e CONFIRMADO ocupam vaga. Confirmação:"
+                    + " somente prestador, PENDENTE antes do início. Cancelamento: cliente ou"
+                    + " prestador envolvido, PENDENTE ou CONFIRMADO antes do início; libera vaga e"
+                    + " permite nova reserva do veículo, preservando histórico. Conclusão: somente"
+                    + " prestador, CONFIRMADO a partir do início. Horário no fuso"
+                    + " America/Sao_Paulo. Cada ação é PATCH sem corpo e registra responsável e"
+                    + " instante. Repetições e transições inválidas retornam 409; prazo inválido"
+                    + " retorna 422; ação de prestador por cliente retorna 403; outra conta recebe"
+                    + " 404. A listagem inclui todos os estados e usa data, hora e ID em ordem"
+                    + " crescente. Em HAL, os links de ação dependem da conta, do estado e do"
+                    + " horário; execute-os por PATCH. Remarcação não está disponível.";
         }
         if (path.contains("tipos-veiculo") || path.contains("especialidades")) {
             return base
@@ -484,9 +495,9 @@ public class OpenApiConfiguration {
                     + " consulta pública mostra apenas horários futuros, abertos e com vagas. A"
                     + " criação manual permite fins de semana e horários fora do padrão mensal. PUT"
                     + " altera somente capacidade e bloqueio. Vagas disponíveis correspondem à"
-                    + " capacidade menos as reservas PENDENTES. Horários lotados não aparecem na"
-                    + " consulta pública. A capacidade não pode ser reduzida abaixo das vagas"
-                    + " ocupadas; bloquear o horário impede novas reservas e preserva as"
+                    + " capacidade menos as reservas PENDENTES e CONFIRMADAS. Horários lotados não"
+                    + " aparecem na consulta pública. A capacidade não pode ser reduzida abaixo das"
+                    + " vagas ocupadas; bloquear o horário impede novas reservas e preserva as"
                     + " existentes. A geração mensal acontece no dia 1 às 00:05, na inicialização e"
                     + " após cadastro confirmado do prestador, sem sobrescrever ajustes manuais.";
         }
@@ -519,6 +530,9 @@ public class OpenApiConfiguration {
 
     private List<String> erros(String path, PathItem.HttpMethod method) {
         if (path.contains("agendamentos")) {
+            if (method == PathItem.HttpMethod.PATCH) {
+                return List.of("400", "403", "404", "409", "422");
+            }
             return method == PathItem.HttpMethod.POST
                     ? List.of("400", "404", "409", "422")
                     : List.of("400", "404", "422");
@@ -551,6 +565,7 @@ public class OpenApiConfiguration {
     private String descricaoErro(String status) {
         return switch (status) {
             case "400" -> "Campos, identificadores ou parâmetros inválidos.";
+            case "403" -> "A conta envolvida não tem permissão para esta ação.";
             case "404" -> "Recurso não encontrado ou indisponível para a conta atual.";
             case "409" -> "Cadastro duplicado, horário já existente ou conflito de integridade.";
             default ->
@@ -577,6 +592,10 @@ public class OpenApiConfiguration {
 
     private String descricaoCampo(String campo) {
         return switch (campo) {
+            case "confirmadoEm", "canceladoEm", "concluidoEm" ->
+                    "Instante UTC da ação, registrado pelo servidor; nulo enquanto não realizada.";
+            case "confirmadoPor", "canceladoPor", "concluidoPor" ->
+                    "UUID interno da conta responsável pela ação; preenchido pelo servidor.";
             case "id" -> "Identificador gerado pelo sistema.";
             case "tipoVeiculoId", "tiposVeiculoIds" ->
                     "Identificador ou seleção de identificadores do catálogo de tipos de veículos.";
@@ -590,7 +609,8 @@ public class OpenApiConfiguration {
                     "Número de vagas configuradas para o horário; zero é permitido se não houver"
                             + " reservas. Não pode ser inferior às vagas ocupadas.";
             case "vagasDisponiveis" ->
-                    "Capacidade total menos as vagas ocupadas por reservas PENDENTES.";
+                    "Capacidade total menos as vagas ocupadas por reservas PENDENTES e"
+                        + " CONFIRMADAS.";
             case "bloqueado" ->
                     "Quando verdadeiro, o horário não aparece na disponibilidade pública.";
             case "ativo" -> "Estado da conta; não pode ser alterado pelo PUT de dados pessoais.";

@@ -19,4 +19,8 @@ public interface AgendamentoRepository {
     Optional<Agendamento> buscarDoUsuario(UUID id, UUID usuarioId);
 
     PaginaAgendamentos listarDoUsuario(UUID usuarioId, int page, int size);
+
+    Optional<Agendamento> bloquear(UUID id);
+
+    Agendamento atualizar(Agendamento agendamento);
 }

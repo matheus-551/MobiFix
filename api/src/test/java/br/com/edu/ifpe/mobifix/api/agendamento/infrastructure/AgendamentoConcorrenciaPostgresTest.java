@@ -231,6 +231,64 @@ class AgendamentoConcorrenciaPostgresTest {
                         : resultados.contains("reduzido"));
     }
 
+    @Test
+    void confirmarECancelarSimultaneamenteNaoRestauraReservaCancelada() throws Exception {
+        var profissional = prestador();
+        var horario = horario(profissional, 1);
+        var cliente = conta(TipoUsuario.CLIENTE);
+        var veiculo = carro(cliente);
+        var reserva = agendamentos.criar(cliente.firebaseId(), command(veiculo, horario));
+
+        simultaneos(
+                List.of(
+                        () -> {
+                            agendamentos.cancelar(cliente.firebaseId(), reserva.id());
+                            return "cancelado";
+                        },
+                        () -> {
+                            try {
+                                agendamentos.confirmar(profissional.firebaseId(), reserva.id());
+                                return "confirmado";
+                            } catch (ConflitoAgendamentoException exception) {
+                                return "conflito";
+                            }
+                        }));
+
+        var atual = agendamentos.consultar(cliente.firebaseId(), reserva.id());
+
+        assertEquals("CANCELADO", atual.status().name());
+        assertEquals(cliente.id(), atual.canceladoPor());
+        assertEquals(0, reservas.countByHorario_Id(horario.id()));
+    }
+
+    @Test
+    void cancelamentoConcorrenteComNovaReservaNaoDuplicaVagaDoVeiculo() throws Exception {
+        var profissional = prestador();
+        var horario = horario(profissional, 1);
+        var cliente = conta(TipoUsuario.CLIENTE);
+        var veiculo = carro(cliente);
+        var anterior = agendamentos.criar(cliente.firebaseId(), command(veiculo, horario));
+
+        var resultados =
+                simultaneos(
+                        List.of(
+                                () -> {
+                                    agendamentos.cancelar(cliente.firebaseId(), anterior.id());
+                                    return "cancelado";
+                                },
+                                () -> reservar(cliente, veiculo, horario)));
+
+        if (resultados.contains("conflito")) {
+            agendamentos.criar(cliente.firebaseId(), command(veiculo, horario));
+        }
+
+        assertEquals(1, reservas.countByHorario_Id(horario.id()));
+        assertEquals(2, agendamentos.listarMeus(cliente.firebaseId(), 0, 20).totalElements());
+        assertEquals(
+                "CANCELADO",
+                agendamentos.consultar(cliente.firebaseId(), anterior.id()).status().name());
+    }
+
     @AfterEach
     void limparSomenteDadosDesteTeste() {
         for (UUID id : contasCriadas)

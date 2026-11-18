@@ -2,6 +2,7 @@ package br.com.edu.ifpe.mobifix.api.agendamento.application;
 
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.AgendamentoNaoEncontradoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.ConflitoAgendamentoException;
+import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.PermissaoAgendamentoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.RecursoAgendamentoNaoEncontradoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.RegraAgendamentoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.port.ContextoAgendamento;
@@ -123,5 +124,71 @@ public class GerenciarAgendamentos implements Agendamentos {
         }
 
         return usuario;
+    }
+
+    @Override
+    public Agendamento confirmar(String firebaseId, UUID id) {
+        return alterarStatus(firebaseId, id, StatusAgendamento.CONFIRMADO);
+    }
+
+    @Override
+    public Agendamento cancelar(String firebaseId, UUID id) {
+        return alterarStatus(firebaseId, id, StatusAgendamento.CANCELADO);
+    }
+
+    @Override
+    public Agendamento concluir(String firebaseId, UUID id) {
+        return alterarStatus(firebaseId, id, StatusAgendamento.CONCLUIDO);
+    }
+
+    private Agendamento alterarStatus(String firebaseId, UUID id, StatusAgendamento destino) {
+        var usuario = validarAtivo(contexto.usuarioAtual(firebaseId));
+        var referencia =
+                agendamentos
+                        .buscarDoUsuario(id, usuario.id())
+                        .orElseThrow(AgendamentoNaoEncontradoException::new);
+
+        if (destino != StatusAgendamento.CANCELADO && usuario.tipo() != TipoUsuario.PRESTADOR) {
+            throw new PermissaoAgendamentoException();
+        }
+
+        // A mesma ordem de bloqueio da criação evita conflito entre cancelar e reservar.
+        contexto.bloquearVeiculo(referencia.veiculoId());
+        contexto.horarioParaReserva(referencia.horarioId())
+                .orElseThrow(() ->
+                        new RecursoAgendamentoNaoEncontradoException("Horário não encontrado."));
+        var atual = agendamentos.bloquear(id).orElseThrow(AgendamentoNaoEncontradoException::new);
+        boolean pendente = atual.status() == StatusAgendamento.PENDENTE;
+        boolean confirmado = atual.status() == StatusAgendamento.CONFIRMADO;
+        boolean transicaoValida =
+                switch (destino) {
+                    case CONFIRMADO -> pendente;
+                    case CANCELADO -> pendente || confirmado;
+                    case CONCLUIDO -> confirmado;
+                    default -> false;
+                };
+
+        if (!transicaoValida) {
+            throw new ConflitoAgendamentoException(
+                    "A ação não é permitida para o estado atual do agendamento.");
+        }
+
+        boolean futuro =
+                LocalDateTime.of(atual.data(), atual.horaInicio())
+                        .isAfter(LocalDateTime.now(clock));
+
+        if (destino == StatusAgendamento.CONCLUIDO && futuro) {
+            throw new RegraAgendamentoException(
+                    "O agendamento só pode ser concluído a partir do horário de início.");
+        }
+
+        if (destino != StatusAgendamento.CONCLUIDO && !futuro) {
+            throw new RegraAgendamentoException(
+                    "Confirmação e cancelamento são permitidos somente antes do horário de"
+                        + " início.");
+        }
+
+        return agendamentos.atualizar(
+                atual.registrarStatus(destino, usuario.id(), clock.instant()));
     }
 }

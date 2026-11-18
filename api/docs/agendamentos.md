@@ -1,6 +1,6 @@
 # Agendamentos: criação e consultas
 
-Esta etapa cria reservas com status **PENDENTE**. Cada agendamento já ocupa uma vaga do horário. Confirmação, cancelamento, conclusão, duração de serviços e remarcação serão tratados em etapas posteriores.
+As reservas nascem **PENDENTE** e podem ser confirmadas, canceladas ou concluídas pelas regras abaixo. PENDENTE e CONFIRMADO ocupam vaga. Duração de serviços e remarcação serão tratadas em etapas posteriores.
 
 ## Endpoints
 
@@ -9,6 +9,9 @@ Esta etapa cria reservas com status **PENDENTE**. Cada agendamento já ocupa uma
 | POST | `/api/v1/agendamentos` | Cliente cria uma reserva |
 | GET | `/api/v1/agendamentos/me?page=0&size=20` | Cliente ou prestador lista os próprios agendamentos |
 | GET | `/api/v1/agendamentos/{id}` | Consulta restrita ao cliente e prestador envolvidos |
+| PATCH | `/api/v1/agendamentos/{id}/confirmar` | Prestador confirma um pendente antes do início |
+| PATCH | `/api/v1/agendamentos/{id}/cancelar` | Cliente ou prestador cancela pendente/confirmado antes do início |
+| PATCH | `/api/v1/agendamentos/{id}/concluir` | Prestador conclui confirmado a partir do início |
 
 Todas as rotas exigem `Authorization: Bearer <ID token Firebase>`. O UID vem do token e o cliente não pode ser escolhido pelo corpo da requisição. Contas inativas não podem utilizar essas operações. Um prestador ativo sem agendamentos recebe uma página vazia.
 
@@ -22,7 +25,7 @@ Todas as rotas exigem `Authorization: Bearer <ID token Firebase>`. O UID vem do 
 
 Os IDs acima são ilustrativos. Obtenha os IDs reais por `/api/v1/veiculos/me`, pela consulta pública de horários e pelas especialidades do perfil público do prestador. O perfil deve atender tanto o tipo do veículo quanto a especialidade.
 
-O POST retorna `201`, o agendamento com seu ID, data, hora, vínculos, status e instante de criação, e o header `Location` da consulta individual. Não há endpoint de alteração ou exclusão da reserva nesta etapa. Após falha de conexão ou resposta perdida, consulte a listagem antes de repetir o POST; uma reserva já confirmada no banco pode gerar `409` na repetição.
+O POST retorna `201`, o agendamento com seu ID, data, hora, vínculos, status e instante de criação, e o header `Location` da consulta individual. As ações PATCH não recebem corpo. A identidade e o instante da ação são definidos pelo servidor. Não há exclusão física nem remarcação. Após falha de conexão ou resposta perdida, consulte a listagem antes de repetir o POST; uma reserva já confirmada no banco pode gerar `409` na repetição.
 
 ## Regras e concorrência
 
@@ -30,18 +33,18 @@ O POST retorna `201`, o agendamento com seu ID, data, hora, vínculos, status e 
 - O horário deve existir, estar no futuro no fuso `America/Sao_Paulo`, estar aberto e ter capacidade livre.
 - O prestador deve estar ativo e atender o tipo do veículo e a especialidade solicitada.
 - O mesmo veículo não pode ser reservado para a mesma data e hora, inclusive em prestadores diferentes. Como não há duração de serviço nesta etapa, a regra compara o instante inicial exato.
-- `vagasDisponiveis = capacidadeTotal - reservas PENDENTES`. Horários lotados deixam de aparecer na consulta pública.
+- `vagasDisponiveis = capacidadeTotal - quantidade de reservas PENDENTE ou CONFIRMADO`. Horários lotados deixam de aparecer na consulta pública.
 - O prestador pode aumentar capacidade e bloquear/reabrir o horário. Não pode reduzir a capacidade abaixo das reservas existentes. O bloqueio não cancela agendamentos anteriores.
 
-A criação utiliza uma única transação. Os bloqueios são adquiridos em ordem: cliente, veículo e horário. O veículo serializa tentativas duplicadas, e o horário serializa o cálculo das vagas e sua gravação. A alteração de capacidade utiliza o mesmo bloqueio do horário e confere novamente a ocupação. O banco também possui uma restrição única para veículo/data/hora e vínculos por chaves estrangeiras.
+A criação utiliza uma única transação. Os bloqueios são adquiridos em ordem: cliente, veículo e horário. O veículo serializa tentativas duplicadas, e o horário serializa o cálculo das vagas e sua gravação. A alteração de capacidade utiliza o mesmo bloqueio do horário e confere novamente a ocupação. O banco também possui uma restrição única parcial para veículo/data/hora em reservas ativas e vínculos por chaves estrangeiras.
 
-As regras ficam em `agendamento/application`, sem dependências Spring. O adapter `AgendamentosTransacionais` estabelece a transação, e os adapters de persistência exigem uma transação ativa. A nova tabela `agendamento` e seus índices são criados pelo `ddl-auto: update` atual; não foram introduzidas migrations. A evolução para cancelamentos precisará rever a regra de unicidade para permitir novas reservas após liberar uma vaga.
+As regras ficam em `agendamento/application`, sem dependências Spring. O adapter `AgendamentosTransacionais` estabelece a transação, e os adapters de persistência exigem uma transação ativa. O `ddl-auto: update` cria a tabela e as colunas de auditoria. Sem adicionar migrations, o `AgendamentoSchemaInitializer` ajusta na inicialização as duas restrições que o Hibernate não atualiza: o CHECK do enum e a unicidade parcial para veículo/data/hora em PENDENTE ou CONFIRMADO. O ajuste é idempotente, transacional, preserva registros e ocorre antes de a aplicação estar pronta. A conta do banco precisa ser proprietária da tabela, como já exigido pelo ddl-auto. Não é necessário apagar o banco. O índice novo é criado antes de remover a restrição antiga.
 
 ## Paginação e formatos
 
 `page` começa em zero. `size` aceita 1 a 100, com padrão 20. A ordem é data, hora e ID em ordem crescente. A consulta sempre aplica o vínculo do usuário autenticado, inclusive antes de calcular os totais.
 
-Com `Accept: application/json`, a página possui `content`, `page`, `size`, `totalElements` e `totalPages`. Com `Accept: application/hal+json`, os itens ficam em `_embedded.agendamentos`, os metadados em `page` e a navegação em `_links`. Página vazia mantém o array nomeado. Os recursos HAL oferecem `self`, `collection` e consulta pública do prestador; não anunciam ações ainda não implementadas.
+Com `Accept: application/json`, a página possui `content`, `page`, `size`, `totalElements` e `totalPages`. Com `Accept: application/hal+json`, os itens ficam em `_embedded.agendamentos`, os metadados em `page` e a navegação em `_links`. Página vazia mantém o array nomeado. Os recursos HAL oferecem navegação e as ações permitidas para a conta, estado e instante atuais. Siga `confirmar`, `cancelar` e `concluir` por PATCH, não por GET. Os links não substituem as validações do backend.
 
 ## Erros
 
@@ -49,8 +52,9 @@ Com `Accept: application/json`, a página possui `content`, `page`, `size`, `tot
 | --- | --- |
 | 400 | Corpo, UUID, especialidade ou parâmetros de paginação inválidos |
 | 401 | Token ausente, inválido ou expirado |
+| 403 | Cliente tentando confirmar ou concluir um agendamento |
 | 404 | Conta local ou recurso inexistente; veículo/agendamento não acessível ao usuário |
-| 409 | Horário lotado, duplicidade do veículo ou conflito de gravação |
+| 409 | Horário lotado, duplicidade do veículo, transição de estado inválida ou conflito de gravação |
 | 422 | Conta inativa, tipo de conta inadequado, atendimento incompatível, horário passado/bloqueado ou capacidade abaixo das reservas |
 | 503 | Falha no serviço/configuração de autenticação Firebase |
 
@@ -80,3 +84,22 @@ mvn test '-Dmobifix.test.postgres=true' `
 ```
 
 O PostgreSQL deve estar disponível antes do comando. A execução normal da aplicação continua usando Java 25 e as variáveis de conexão já documentadas no README.
+
+## Ciclo e auditoria
+
+PENDENTE pode virar CONFIRMADO ou CANCELADO. CONFIRMADO pode virar CANCELADO ou CONCLUIDO. CANCELADO e CONCLUIDO são estados finais. Repetir uma ação já realizada retorna 409 sem alterar auditoria nem liberar vaga novamente.
+
+Confirmação e cancelamento exigem instante estritamente anterior ao início. A conclusão aceita o instante inicial e os posteriores, no fuso America/Sao_Paulo. Bloquear um horário impede novas reservas, mas não impede gerenciar as reservas existentes dentro dessas regras.
+
+As respostas incluem `confirmadoEm`/`confirmadoPor`, `canceladoEm`/`canceladoPor` e `concluidoEm`/`concluidoPor`. Os instantes são UTC e os responsáveis são IDs internos das contas. Os campos ficam nulos até a ação e o histórico anterior é preservado. A listagem mantém todos os estados.
+
+As alterações bloqueiam veículo, horário e agendamento, na mesma ordem usada pela criação, e recarregam o estado após obter o bloqueio. Assim, um cancelamento concorrente não pode ser sobrescrito por uma confirmação que tenha lido o estado antigo.
+
+### Teste manual das ações
+
+1. Crie um agendamento futuro e confirme com o token do prestador: espere 200, CONFIRMADO e auditoria do prestador. A ocupação permanece a mesma.
+2. Tente confirmar com o cliente (403) e cancelar com uma terceira conta (404).
+3. Cancele com o cliente ou prestador antes do início: espere CANCELADO e recuperação da vaga. Reserve novamente o mesmo veículo/horário e confira que o registro anterior continua consultável.
+4. Repita confirmação ou cancelamento em um estado incompatível: espere 409.
+5. Antes do início, tente concluir: espere 422. A partir do início, conclua um confirmado com o prestador: espere CONCLUIDO e auditoria, preservando os dados da confirmação.
+6. Confira os links HAL com os tokens de cliente e prestador e a documentação dos PATCH no Swagger.

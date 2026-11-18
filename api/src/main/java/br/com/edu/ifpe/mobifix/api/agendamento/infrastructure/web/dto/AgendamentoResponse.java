@@ -20,7 +20,13 @@ public record AgendamentoResponse(
         LocalDate data,
         LocalTime horaInicio,
         String status,
-        Instant criadoEm) {
+        Instant criadoEm,
+        Instant confirmadoEm,
+        UUID confirmadoPor,
+        Instant canceladoEm,
+        UUID canceladoPor,
+        Instant concluidoEm,
+        UUID concluidoPor) {
     public static AgendamentoResponse de(Agendamento agendamento) {
         return new AgendamentoResponse(
                 agendamento.id(),
@@ -32,6 +38,12 @@ public record AgendamentoResponse(
                 agendamento.data(),
                 agendamento.horaInicio(),
                 agendamento.status().name(),
-                agendamento.criadoEm());
+                agendamento.criadoEm(),
+                agendamento.confirmadoEm(),
+                agendamento.confirmadoPor(),
+                agendamento.canceladoEm(),
+                agendamento.canceladoPor(),
+                agendamento.concluidoEm(),
+                agendamento.concluidoPor());
     }
 }

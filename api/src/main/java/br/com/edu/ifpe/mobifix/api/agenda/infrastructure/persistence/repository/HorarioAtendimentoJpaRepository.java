@@ -39,10 +39,10 @@ public interface HorarioAtendimentoJpaRepository
     @Query(
             """
             select new br.com.edu.ifpe.mobifix.api.agenda.domain.model.HorarioDisponivel(
-                h.id, h.data, h.horaInicio, h.capacidadeTotal - (select count(a.id) from AgendamentoEntity a where a.horario.id = h.id))
+                h.id, h.data, h.horaInicio, h.capacidadeTotal - (select count(a.id) from AgendamentoEntity a where a.horario.id = h.id and a.status in ('PENDENTE', 'CONFIRMADO')))
             from HorarioAtendimentoEntity h join h.prestador p join p.usuario u
             where p.id = :prestadorId and u.ativo = true and u.tipo = :tipo
-              and h.data between :inicio and :fim and h.bloqueado = false and h.capacidadeTotal > (select count(a.id) from AgendamentoEntity a where a.horario.id = h.id)
+              and h.data between :inicio and :fim and h.bloqueado = false and h.capacidadeTotal > (select count(a.id) from AgendamentoEntity a where a.horario.id = h.id and a.status in ('PENDENTE', 'CONFIRMADO'))
               and (h.data > :hoje or (h.data = :hoje and h.horaInicio > :horaAtual))
             order by h.data, h.horaInicio
             """)
