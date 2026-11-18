@@ -1,6 +1,7 @@
 package br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.persistence.entity;
 
 import br.com.edu.ifpe.mobifix.api.agenda.infrastructure.persistence.entity.HorarioAtendimentoEntity;
+import br.com.edu.ifpe.mobifix.api.agendamento.domain.model.Agendamento;
 import br.com.edu.ifpe.mobifix.api.agendamento.domain.model.StatusAgendamento;
 import br.com.edu.ifpe.mobifix.api.catalogo.infrastructure.persistence.entity.EspecialidadeEntity;
 import br.com.edu.ifpe.mobifix.api.prestador.infrastructure.persistence.entity.PerfilPrestadorEntity;
@@ -17,7 +18,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -33,10 +33,6 @@ import java.util.UUID;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
         name = "agendamento",
-        uniqueConstraints =
-                @UniqueConstraint(
-                        name = "uk_agendamento_veiculo_data_hora",
-                        columnNames = {"veiculo_id", "data", "hora_inicio"}),
         indexes = {
             @Index(name = "ix_agendamento_horario", columnList = "horario_id"),
             @Index(
@@ -83,6 +79,24 @@ public class AgendamentoEntity {
     @Column(name = "criado_em", nullable = false)
     private Instant criadoEm;
 
+    @Column(name = "confirmado_em")
+    private Instant confirmadoEm;
+
+    @Column(name = "confirmado_por")
+    private UUID confirmadoPor;
+
+    @Column(name = "cancelado_em")
+    private Instant canceladoEm;
+
+    @Column(name = "cancelado_por")
+    private UUID canceladoPor;
+
+    @Column(name = "concluido_em")
+    private Instant concluidoEm;
+
+    @Column(name = "concluido_por")
+    private UUID concluidoPor;
+
     public AgendamentoEntity(
             UUID id,
             UsuarioEntity cliente,
@@ -104,5 +118,15 @@ public class AgendamentoEntity {
         this.horaInicio = horaInicio;
         this.status = status;
         this.criadoEm = criadoEm;
+    }
+
+    public void registrarAlteracao(Agendamento agendamento) {
+        this.status = agendamento.status();
+        this.confirmadoEm = agendamento.confirmadoEm();
+        this.confirmadoPor = agendamento.confirmadoPor();
+        this.canceladoEm = agendamento.canceladoEm();
+        this.canceladoPor = agendamento.canceladoPor();
+        this.concluidoEm = agendamento.concluidoEm();
+        this.concluidoPor = agendamento.concluidoPor();
     }
 }

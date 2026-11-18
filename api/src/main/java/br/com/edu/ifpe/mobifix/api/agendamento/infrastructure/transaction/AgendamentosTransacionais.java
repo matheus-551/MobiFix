@@ -43,4 +43,22 @@ public class AgendamentosTransacionais implements Agendamentos {
     public PaginaAgendamentos listarMeus(String firebaseId, int page, int size) {
         return regras.listarMeus(firebaseId, page, size);
     }
+
+    @Override
+    @Transactional
+    public Agendamento confirmar(String firebaseId, UUID id) {
+        return regras.confirmar(firebaseId, id);
+    }
+
+    @Override
+    @Transactional
+    public Agendamento cancelar(String firebaseId, UUID id) {
+        return regras.cancelar(firebaseId, id);
+    }
+
+    @Override
+    @Transactional
+    public Agendamento concluir(String firebaseId, UUID id) {
+        return regras.concluir(firebaseId, id);
+    }
 }

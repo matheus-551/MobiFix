@@ -2,6 +2,7 @@ package br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.web;
 
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.AgendamentoNaoEncontradoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.ConflitoAgendamentoException;
+import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.PermissaoAgendamentoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.RecursoAgendamentoNaoEncontradoException;
 import br.com.edu.ifpe.mobifix.api.agendamento.application.exception.RegraAgendamentoException;
 
@@ -76,6 +77,13 @@ public class AgendamentoExceptionHandler {
             }
         }
         throw exception;
+    }
+
+    public record ErroCampo(String field, String message) {}
+
+    @ExceptionHandler(PermissaoAgendamentoException.class)
+    public ProblemDetail permissao(PermissaoAgendamentoException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, exception.getMessage());
     }
 
     public record ErroCampo(String field, String message) {}

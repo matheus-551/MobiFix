@@ -12,6 +12,7 @@ import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.persistence.entity.Usu
 import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.persistence.entity.VeiculoEntity;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -100,6 +101,35 @@ public class AgendamentoPersistenceAdapter implements AgendamentoRepository {
                 agendamento.getData(),
                 agendamento.getHoraInicio(),
                 agendamento.getStatus(),
-                agendamento.getCriadoEm());
+                agendamento.getCriadoEm(),
+                agendamento.getConfirmadoEm(),
+                agendamento.getConfirmadoPor(),
+                agendamento.getCanceladoEm(),
+                agendamento.getCanceladoPor(),
+                agendamento.getConcluidoEm(),
+                agendamento.getConcluidoPor());
+    }
+
+    @Override
+    public Optional<Agendamento> bloquear(UUID id) {
+        var entity = entityManager.find(AgendamentoEntity.class, id);
+
+        if (entity == null) {
+            return Optional.empty();
+        }
+
+        // Atualiza inclusive entidades já lidas nesta transação, após aguardar o bloqueio.
+        entityManager.refresh(entity, LockModeType.PESSIMISTIC_WRITE);
+
+        return Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public Agendamento atualizar(Agendamento agendamento) {
+        var entity = entityManager.find(AgendamentoEntity.class, agendamento.id());
+        entity.registrarAlteracao(agendamento);
+        repository.flush();
+
+        return toDomain(entity);
     }
 }

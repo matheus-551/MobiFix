@@ -17,10 +17,19 @@ import java.util.UUID;
 @NullMarked
 public interface AgendamentoJpaRepository extends JpaRepository<AgendamentoEntity, UUID> {
 
-    long countByHorario_Id(UUID horarioId);
+    @Query(
+            "select count(a) from AgendamentoEntity a where a.horario.id = :horarioId and a.status"
+                + " in ('PENDENTE', 'CONFIRMADO')")
+    long countByHorario_Id(@Param("horarioId") UUID horarioId);
 
+    @Query(
+            "select (count(a) > 0) from AgendamentoEntity a where a.veiculo.id = :veiculoId and"
+                + " a.data = :data and a.horaInicio = :horaInicio and a.status in ('PENDENTE',"
+                + " 'CONFIRMADO')")
     boolean existsByVeiculo_IdAndDataAndHoraInicio(
-            UUID veiculoId, LocalDate data, LocalTime horaInicio);
+            @Param("veiculoId") UUID veiculoId,
+            @Param("data") LocalDate data,
+            @Param("horaInicio") LocalTime horaInicio);
 
     @Query(
             "select a from AgendamentoEntity a where a.id = :id and (a.cliente.id = :usuarioId or"

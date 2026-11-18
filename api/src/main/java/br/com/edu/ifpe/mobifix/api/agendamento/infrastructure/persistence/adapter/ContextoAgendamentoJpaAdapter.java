@@ -9,6 +9,7 @@ import br.com.edu.ifpe.mobifix.api.usuario.domain.model.Usuario;
 import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.persistence.entity.UsuarioEntity;
 import br.com.edu.ifpe.mobifix.api.usuario.infrastructure.persistence.repository.UsuarioJpaRepository;
 import br.com.edu.ifpe.mobifix.api.veiculo.domain.model.Veiculo;
+import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.persistence.entity.VeiculoEntity;
 import br.com.edu.ifpe.mobifix.api.veiculo.infrastructure.persistence.repository.VeiculoJpaRepository;
 
 import jakarta.persistence.EntityManager;
@@ -127,5 +128,14 @@ public class ContextoAgendamentoJpaAdapter implements ContextoAgendamento {
                 usuario.getUf(),
                 usuario.getTipo(),
                 usuario.isAtivo());
+    }
+
+    @Override
+    public void bloquearVeiculo(UUID id) {
+        var veiculo = entityManager.find(VeiculoEntity.class, id, LockModeType.PESSIMISTIC_WRITE);
+
+        if (veiculo == null) {
+            throw new RecursoAgendamentoNaoEncontradoException("Veículo não encontrado.");
+        }
     }
 }

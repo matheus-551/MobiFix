@@ -141,7 +141,7 @@ public class ApiHalAssembler {
         return model;
     }
 
-    public PagedModel<?> pagina(PaginaAgendamentosResponse dados) {
+    public PagedModel<?> pagina(PaginaAgendamentosResponse dados, boolean prestador) {
         var metadata =
                 new PagedModel.PageMetadata(
                         dados.size(), dados.page(), dados.totalElements(), dados.totalPages());
@@ -150,7 +150,9 @@ public class ApiHalAssembler {
                         ? List.of(
                                 new org.springframework.hateoas.server.core.EmbeddedWrappers(false)
                                         .emptyCollectionOf(AgendamentoResponse.class))
-                        : dados.content().stream().map(this::recurso).toList();
+                        : dados.content().stream()
+                                .map(item -> agendamento(item, prestador))
+                                .toList();
         var model = PagedModel.of(elementos, metadata);
         model.add(Link.of(paginaUrl(dados.page(), dados.size()), "self"));
 
@@ -191,5 +193,29 @@ public class ApiHalAssembler {
                 .replaceQueryParam("size", size)
                 .build(true)
                 .toUriString();
+    }
+
+    public EntityModel<Object> agendamento(AgendamentoResponse dados, boolean prestador) {
+        var model = recurso(dados);
+        boolean futuro =
+                LocalDateTime.of(dados.data(), dados.horaInicio())
+                        .isAfter(LocalDateTime.now(clock));
+        boolean pendente = "PENDENTE".equals(dados.status());
+        boolean confirmado = "CONFIRMADO".equals(dados.status());
+        String path = "/api/v1/agendamentos/" + dados.id();
+
+        if (futuro && (pendente || confirmado)) {
+            model.add(link(path + "/cancelar", "cancelar"));
+        }
+
+        if (prestador && futuro && pendente) {
+            model.add(link(path + "/confirmar", "confirmar"));
+        }
+
+        if (prestador && !futuro && confirmado) {
+            model.add(link(path + "/concluir", "concluir"));
+        }
+
+        return model;
     }
 }

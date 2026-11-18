@@ -12,4 +12,10 @@ public interface Agendamentos {
     Agendamento consultar(String firebaseId, UUID id);
 
     PaginaAgendamentos listarMeus(String firebaseId, int page, int size);
+
+    Agendamento confirmar(String firebaseId, UUID id);
+
+    Agendamento cancelar(String firebaseId, UUID id);
+
+    Agendamento concluir(String firebaseId, UUID id);
 }
