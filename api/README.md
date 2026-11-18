@@ -223,6 +223,12 @@ Invoke-RestMethod `
 
 Consulte [Swagger e HATEOAS](docs/swagger-hateoas.md) para detalhes sobre links, paginação e testes manuais.
 
+## Agendamentos
+
+Clientes podem reservar vagas em horários compatíveis e futuros por `POST /api/v1/agendamentos`. As reservas nascem `PENDENTE` e já ocupam uma vaga. Cliente e prestador envolvidos consultam os registros por `/api/v1/agendamentos/me` e `/api/v1/agendamentos/{id}`. A disponibilidade pública desconta as reservas, e o prestador não pode reduzir capacidade abaixo da ocupação.
+
+Consulte o [guia de agendamentos](docs/agendamentos.md) para o contrato, regras, concorrência, paginação, HATEOAS e roteiro de testes.
+
 ## Problemas frequentes
 
 - **Classe compilada com versão mais recente / source 8:** confira o JDK usado pelo terminal, Maven e IntelliJ. O projeto requer Java 25.
