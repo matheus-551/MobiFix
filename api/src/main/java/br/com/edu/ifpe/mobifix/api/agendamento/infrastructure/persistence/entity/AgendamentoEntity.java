@@ -97,6 +97,12 @@ public class AgendamentoEntity {
     @Column(name = "concluido_por")
     private UUID concluidoPor;
 
+    @Column(name = "remarcado_em")
+    private Instant remarcadoEm;
+
+    @Column(name = "remarcado_por")
+    private UUID remarcadoPor;
+
     public AgendamentoEntity(
             UUID id,
             UsuarioEntity cliente,
@@ -120,7 +126,12 @@ public class AgendamentoEntity {
         this.criadoEm = criadoEm;
     }
 
-    public void registrarAlteracao(Agendamento agendamento) {
+    public void registrarAlteracao(Agendamento agendamento, HorarioAtendimentoEntity horario) {
+        this.horario = horario;
+        this.data = agendamento.data();
+        this.horaInicio = agendamento.horaInicio();
+        this.remarcadoEm = agendamento.remarcadoEm();
+        this.remarcadoPor = agendamento.remarcadoPor();
         this.status = agendamento.status();
         this.confirmadoEm = agendamento.confirmadoEm();
         this.confirmadoPor = agendamento.confirmadoPor();

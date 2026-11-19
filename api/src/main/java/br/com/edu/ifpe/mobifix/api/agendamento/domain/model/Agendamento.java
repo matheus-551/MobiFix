@@ -21,7 +21,9 @@ public record Agendamento(
         Instant canceladoEm,
         UUID canceladoPor,
         Instant concluidoEm,
-        UUID concluidoPor) {
+        UUID concluidoPor,
+        Instant remarcadoEm,
+        UUID remarcadoPor) {
     public Agendamento {
         if (id == null
                 || clienteId == null
@@ -66,6 +68,8 @@ public record Agendamento(
                 null,
                 null,
                 null,
+                null,
+                null,
                 null);
     }
 
@@ -87,6 +91,35 @@ public record Agendamento(
                 novoStatus == StatusAgendamento.CANCELADO ? instante : canceladoEm,
                 novoStatus == StatusAgendamento.CANCELADO ? responsavel : canceladoPor,
                 novoStatus == StatusAgendamento.CONCLUIDO ? instante : concluidoEm,
-                novoStatus == StatusAgendamento.CONCLUIDO ? responsavel : concluidoPor);
+                novoStatus == StatusAgendamento.CONCLUIDO ? responsavel : concluidoPor,
+                remarcadoEm,
+                remarcadoPor);
+    }
+
+    public Agendamento remarcar(
+            UUID novoHorarioId,
+            LocalDate novaData,
+            LocalTime novaHora,
+            UUID responsavel,
+            Instant instante) {
+        return new Agendamento(
+                id,
+                clienteId,
+                prestadorId,
+                veiculoId,
+                novoHorarioId,
+                especialidadeId,
+                novaData,
+                novaHora,
+                status,
+                criadoEm,
+                confirmadoEm,
+                confirmadoPor,
+                canceladoEm,
+                canceladoPor,
+                concluidoEm,
+                concluidoPor,
+                instante,
+                responsavel);
     }
 }

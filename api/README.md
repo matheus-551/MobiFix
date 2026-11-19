@@ -225,7 +225,7 @@ Consulte [Swagger e HATEOAS](docs/swagger-hateoas.md) para detalhes sobre links,
 
 ## Agendamentos
 
-Clientes podem reservar vagas em horários compatíveis e futuros por `POST /api/v1/agendamentos`. As reservas nascem `PENDENTE` e já ocupam uma vaga. Cliente e prestador envolvidos consultam os registros por `/api/v1/agendamentos/me` e `/api/v1/agendamentos/{id}`. Confirmação, cancelamento e conclusão utilizam PATCH nas rotas de ação do agendamento. Pendentes e confirmados ocupam vagas; cancelamentos liberam a vaga preservando histórico e auditoria. A disponibilidade pública desconta as reservas ativas, e o prestador não pode reduzir capacidade abaixo da ocupação.
+Clientes podem reservar vagas em horários compatíveis e futuros por `POST /api/v1/agendamentos`. As reservas nascem `PENDENTE` e já ocupam uma vaga. Cliente e prestador envolvidos consultam os registros por `/api/v1/agendamentos/me` e `/api/v1/agendamentos/{id}`. Confirmação, cancelamento, conclusão e remarcação utilizam PATCH nas rotas de ação do agendamento. O cliente pode remarcar um pendente antes do início enviando `horarioId` para `/{id}/remarcar`: a transferência de vaga ocorre em uma única transação, no mesmo prestador, preservando ID e vínculos e registrando a última remarcação. Pendentes e confirmados ocupam vagas; cancelamentos liberam a vaga preservando histórico e auditoria. A disponibilidade pública desconta as reservas ativas, e o prestador não pode reduzir capacidade abaixo da ocupação.
 
 Consulte o [guia de agendamentos](docs/agendamentos.md) para o contrato, regras, concorrência, paginação, HATEOAS e roteiro de testes.
 

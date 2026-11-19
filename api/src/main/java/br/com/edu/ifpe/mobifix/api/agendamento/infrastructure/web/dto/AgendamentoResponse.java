@@ -26,7 +26,9 @@ public record AgendamentoResponse(
         Instant canceladoEm,
         UUID canceladoPor,
         Instant concluidoEm,
-        UUID concluidoPor) {
+        UUID concluidoPor,
+        Instant remarcadoEm,
+        UUID remarcadoPor) {
     public static AgendamentoResponse de(Agendamento agendamento) {
         return new AgendamentoResponse(
                 agendamento.id(),
@@ -44,6 +46,8 @@ public record AgendamentoResponse(
                 agendamento.canceladoEm(),
                 agendamento.canceladoPor(),
                 agendamento.concluidoEm(),
-                agendamento.concluidoPor());
+                agendamento.concluidoPor(),
+                agendamento.remarcadoEm(),
+                agendamento.remarcadoPor());
     }
 }

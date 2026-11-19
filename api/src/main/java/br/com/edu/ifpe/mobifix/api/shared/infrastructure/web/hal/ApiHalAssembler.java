@@ -208,6 +208,10 @@ public class ApiHalAssembler {
             model.add(link(path + "/cancelar", "cancelar"));
         }
 
+        if (!prestador && futuro && pendente) {
+            model.add(link(path + "/remarcar", "remarcar"));
+        }
+
         if (prestador && futuro && pendente) {
             model.add(link(path + "/confirmar", "confirmar"));
         }

@@ -138,4 +138,27 @@ public class ContextoAgendamentoJpaAdapter implements ContextoAgendamento {
             throw new RecursoAgendamentoNaoEncontradoException("Veículo não encontrado.");
         }
     }
+
+    @Override
+    public HorarioAtendimento bloquearHorariosParaRemarcacao(UUID origem, UUID destino) {
+        // Toda remarcação adquire os horários na mesma ordem, mesmo em trocas opostas.
+        if (origem.compareTo(destino) < 0) {
+            horarioObrigatorio(origem);
+            return horarioObrigatorio(destino);
+        }
+
+        var novoHorario = horarioObrigatorio(destino);
+
+        if (!origem.equals(destino)) {
+            horarioObrigatorio(origem);
+        }
+
+        return novoHorario;
+    }
+
+    private HorarioAtendimento horarioObrigatorio(UUID id) {
+        return horarioParaReserva(id)
+                .orElseThrow(() ->
+                        new RecursoAgendamentoNaoEncontradoException("Horário não encontrado."));
+    }
 }

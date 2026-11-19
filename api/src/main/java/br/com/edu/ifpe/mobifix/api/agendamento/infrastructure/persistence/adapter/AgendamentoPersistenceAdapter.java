@@ -107,7 +107,9 @@ public class AgendamentoPersistenceAdapter implements AgendamentoRepository {
                 agendamento.getCanceladoEm(),
                 agendamento.getCanceladoPor(),
                 agendamento.getConcluidoEm(),
-                agendamento.getConcluidoPor());
+                agendamento.getConcluidoPor(),
+                agendamento.getRemarcadoEm(),
+                agendamento.getRemarcadoPor());
     }
 
     @Override
@@ -127,7 +129,10 @@ public class AgendamentoPersistenceAdapter implements AgendamentoRepository {
     @Override
     public Agendamento atualizar(Agendamento agendamento) {
         var entity = entityManager.find(AgendamentoEntity.class, agendamento.id());
-        entity.registrarAlteracao(agendamento);
+        entity.registrarAlteracao(
+                agendamento,
+                entityManager.getReference(
+                        HorarioAtendimentoEntity.class, agendamento.horarioId()));
         repository.flush();
 
         return toDomain(entity);

@@ -5,6 +5,7 @@ import br.com.edu.ifpe.mobifix.api.agendamento.application.CriarAgendamentoComma
 import br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.web.dto.AgendamentoResponse;
 import br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.web.dto.CriarAgendamentoRequest;
 import br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.web.dto.PaginaAgendamentosResponse;
+import br.com.edu.ifpe.mobifix.api.agendamento.infrastructure.web.dto.RemarcarAgendamentoRequest;
 import br.com.edu.ifpe.mobifix.api.shared.infrastructure.security.IdentidadeAtual;
 import br.com.edu.ifpe.mobifix.api.shared.infrastructure.web.hal.ApiHalAssembler;
 import br.com.edu.ifpe.mobifix.api.usuario.application.useCase.consultarUsuarioAtual.ConsultarUsuarioAtual;
@@ -145,5 +146,19 @@ public class AgendamentoController {
 
     private boolean prestadorAtual() {
         return consultarUsuario.executar(identidade.firebaseId()).tipo() == TipoUsuario.PRESTADOR;
+    }
+
+    @PatchMapping("/{id}/remarcar")
+    public AgendamentoResponse remarcar(
+            @PathVariable UUID id, @Valid @RequestBody RemarcarAgendamentoRequest request) {
+        return AgendamentoResponse.de(
+                agendamentos.remarcar(identidade.firebaseId(), id, request.horarioId()));
+    }
+
+    @Hidden
+    @PatchMapping(value = "/{id}/remarcar", produces = "application/hal+json")
+    public EntityModel<Object> remarcarHal(
+            @PathVariable UUID id, @Valid @RequestBody RemarcarAgendamentoRequest request) {
+        return hal.agendamento(remarcar(id, request), prestadorAtual());
     }
 }

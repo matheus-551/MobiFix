@@ -18,4 +18,6 @@ public interface Agendamentos {
     Agendamento cancelar(String firebaseId, UUID id);
 
     Agendamento concluir(String firebaseId, UUID id);
+
+    Agendamento remarcar(String firebaseId, UUID id, UUID horarioId);
 }
