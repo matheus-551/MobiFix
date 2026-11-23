@@ -24,6 +24,8 @@ export const routes = {
   clientAppointments: "/cliente/agendamentos",
   clientReview: "/cliente/agendamentos/avaliar",
   clientVehicles: "/cliente/veiculos",
+  clientNotifications: "/cliente/notificacoes",
+  clientProfile: "/cliente/perfil",
   providerHome: "/prestador",
   providerRequests: "/prestador/solicitacoes",
   providerSchedule: "/prestador/agenda",
