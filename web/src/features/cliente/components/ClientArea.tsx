@@ -6,12 +6,14 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getClientProfile } from "@/features/auth/services/accountService";
 import { useAsync } from "@/shared/hooks/useAsync";
 import { ClientContext, type ClientContextValue } from "../context/ClientContext";
+import { NotificationsProvider } from "../context/NotificationsContext";
+import { ToastProvider } from "./feedback/ToastContext";
 import { ClientShell } from "./ClientShell";
 
 function ClientProviders({ children }: { children: ReactNode }) {
   const { user, account } = useAuth();
   const uid = user?.uid ?? "";
-  const { data: profile } = useAsync(() => getClientProfile(uid), uid, uid !== "");
+  const { data: profile, reload: reloadProfile } = useAsync(() => getClientProfile(uid), uid, uid !== "");
 
   const value = useMemo<ClientContextValue>(
     () => ({
@@ -20,13 +22,18 @@ function ClientProviders({ children }: { children: ReactNode }) {
       profile,
       firstName: profile?.firstName ?? user?.displayName?.split(" ")[0] ?? "",
       fullName: profile ? `${profile.firstName} ${profile.lastName}` : (user?.displayName ?? ""),
+      reloadProfile,
     }),
-    [uid, account?.email, user?.email, user?.displayName, profile],
+    [uid, account?.email, user?.email, user?.displayName, profile, reloadProfile],
   );
 
   return (
     <ClientContext.Provider value={value}>
-      <ClientShell>{children}</ClientShell>
+      <ToastProvider>
+        <NotificationsProvider>
+          <ClientShell>{children}</ClientShell>
+        </NotificationsProvider>
+      </ToastProvider>
     </ClientContext.Provider>
   );
 }

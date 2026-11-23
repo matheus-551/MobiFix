@@ -27,9 +27,42 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+/** Cartão de "carregando dados": o formato imita o conteúdo que vai aparecer. */
+export function LoadingSkeleton({ label = "Carregando dados..." }: { label?: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center">
+    <div role="status" aria-busy="true" className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <p className="mb-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">{label}</p>
+      <div className="flex items-center gap-3">
+        <span aria-hidden className="h-10 w-10 animate-pulse rounded-full bg-gray-100" />
+        <span aria-hidden className="flex-1 space-y-2">
+          <span className="block h-3 w-2/5 animate-pulse rounded bg-gray-100" />
+          <span className="block h-2.5 w-1/5 animate-pulse rounded bg-gray-100" />
+        </span>
+      </div>
+      <span aria-hidden className="mt-5 block h-24 animate-pulse rounded-lg bg-gray-100" />
+    </div>
+  );
+}
+
+export function EmptyState({
+  title,
+  children,
+  action,
+  icon,
+}: {
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+  /** Ícone (lucide) mostrado dentro de um círculo laranja claro, acima do título. */
+  icon?: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white px-6 py-10 text-center shadow-sm">
+      {icon && (
+        <span aria-hidden className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-50 text-orange-500">
+          {icon}
+        </span>
+      )}
       <h3 className="text-sm font-bold text-gray-800">{title}</h3>
       {children && <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">{children}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
