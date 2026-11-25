@@ -3,12 +3,13 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, Car, LayoutDashboard, LogOut, Menu, Search, Wrench, X } from "lucide-react";
+import { Bell, CalendarDays, Car, LayoutDashboard, LogOut, Menu, Search, Settings, Wrench, X } from "lucide-react";
 import { routes } from "@/routes";
 import { signOutUser } from "@/features/auth/services/authService";
 import { Alert } from "@/shared/components/Alert";
 import { getFriendlyError } from "@/shared/lib/api/http";
 import { useClient } from "../context/ClientContext";
+import { useNotifications } from "../context/NotificationsContext";
 
 const NAV_ITEMS = [
   { href: routes.clientHome, label: "Dashboard", Icon: LayoutDashboard, match: (path: string) => path === routes.clientHome },
@@ -25,6 +26,13 @@ const NAV_ITEMS = [
     match: (path: string) => path.startsWith(routes.clientAppointments),
   },
   { href: routes.clientVehicles, label: "Meus Veículos", Icon: Car, match: (path: string) => path.startsWith(routes.clientVehicles) },
+  {
+    href: routes.clientNotifications,
+    label: "Notificações",
+    Icon: Bell,
+    match: (path: string) => path.startsWith(routes.clientNotifications),
+  },
+  { href: routes.clientProfile, label: "Meu Perfil", Icon: Settings, match: (path: string) => path.startsWith(routes.clientProfile) },
 ] as const;
 
 function Sidebar({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
@@ -59,6 +67,7 @@ export function ClientShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { firstName } = useClient();
+  const { unreadCount } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,12 +132,31 @@ export function ClientShell({ children }: { children: ReactNode }) {
         </form>
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <Link
+            href={routes.clientNotifications}
+            aria-label={unreadCount > 0 ? `Notificações (${unreadCount} não lidas)` : "Notificações"}
+            className="relative rounded-lg p-2 text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+          >
+            <Bell aria-hidden className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span
+                aria-hidden
+                className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href={routes.clientProfile}
+            aria-label="Configurações da conta"
+            className="flex items-center gap-2 rounded-lg px-1 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+          >
             <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-sm font-bold text-orange-600">
               {(firstName || "?").charAt(0).toUpperCase()}
             </span>
             <span className="hidden sm:inline">{firstName ? `Olá, ${firstName}!` : "Olá!"}</span>
-          </span>
+          </Link>
           <button
             type="button"
             onClick={handleSignOut}
