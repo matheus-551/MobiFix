@@ -41,10 +41,11 @@ interface AppointmentData {
   description: string;
   status: AppointmentStatus;
   createdAt: Timestamp | null;
+  updatedAt?: Timestamp | null;
 }
 
 function toAppointment(id: string, data: AppointmentData): ClientAppointment {
-  return { ...data, id, createdAt: toDate(data.createdAt) };
+  return { ...data, id, createdAt: toDate(data.createdAt), updatedAt: toDate(data.updatedAt) };
 }
 
 export type NewAppointmentInput = Omit<ClientAppointment, "id" | "status" | "createdAt">;
