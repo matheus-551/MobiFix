@@ -10,6 +10,8 @@ export interface ClientContextValue {
   profile: ClientProfile | null;
   firstName: string;
   fullName: string;
+  /** Recarrega `clientProfiles/{uid}` (use depois de salvar o perfil). */
+  reloadProfile: () => void;
 }
 
 export const ClientContext = createContext<ClientContextValue | null>(null);
