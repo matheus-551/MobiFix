@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Car } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Alert } from "@/shared/components/Alert";
 import { Button } from "@/shared/components/Button";
 import { useAsync } from "@/shared/hooks/useAsync";
 import { getFriendlyError } from "@/shared/lib/api/http";
+import { ConfirmDialog } from "../components/feedback/Dialogs";
+import { useToast } from "../components/feedback/ToastContext";
 import { Modal } from "../components/Modal";
 import { EmptyState, ErrorState, LINK_BUTTON, LoadingBlock } from "../components/StateViews";
 import { STATUS_LABEL, StatusBadge } from "../components/StatusBadge";
@@ -34,6 +37,7 @@ const reviewHref = (id: string) => `${routes.clientReview}?id=${encodeURICompone
 
 export default function MyAppointments() {
   const { uid } = useClient();
+  const { showToast } = useToast();
   const params = useSearchParams();
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(params.get("id"));
@@ -56,7 +60,8 @@ export default function MyAppointments() {
     setCancelling(true);
     try {
       await cancelAppointment(toCancel.id);
-      setFeedback({ tone: "success", message: `Agendamento com ${toCancel.providerName} cancelado.` });
+      setFeedback(null);
+      showToast(`Agendamento com ${toCancel.providerName} cancelado.`);
       setConfirmingId(null);
       setOpenId(null);
       appointments.reload();
@@ -125,6 +130,7 @@ export default function MyAppointments() {
         <ErrorState message={getFriendlyError(appointments.error)} onRetry={appointments.reload} />
       ) : visible.length === 0 ? (
         <EmptyState
+          icon={filter === "all" ? <Car className="h-5 w-5" /> : undefined}
           title={filter === "all" ? "Você ainda não tem agendamentos" : `Nenhum agendamento ${STATUS_LABEL[filter].toLowerCase()}`}
           action={
             filter === "all" ? (
@@ -237,23 +243,20 @@ export default function MyAppointments() {
       )}
 
       {toCancel && (
-        <Modal title="Cancelar agendamento?" onClose={() => !cancelling && setConfirmingId(null)}>
-          <p className="text-sm text-gray-600">
-            Você está cancelando o atendimento com <strong>{toCancel.providerName}</strong> em {formatRelativeDate(toCancel.date)} às {toCancel.time}. Esta ação não pode ser desfeita.
-          </p>
-          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <div className="sm:w-32">
-              <Button variant="secondary" onClick={() => setConfirmingId(null)} disabled={cancelling}>
-                Voltar
-              </Button>
-            </div>
-            <div className="sm:w-44">
-              <Button onClick={handleCancel} loading={cancelling} loadingLabel="Cancelando...">
-                Confirmar cancelamento
-              </Button>
-            </div>
-          </div>
-        </Modal>
+        <ConfirmDialog
+          title="Deseja cancelar este agendamento?"
+          description={
+            <>
+              Atendimento com <strong>{toCancel.providerName}</strong> em {formatRelativeDate(toCancel.date)} às {toCancel.time}. Esta ação não poderá
+              ser desfeita posteriormente.
+            </>
+          }
+          confirmLabel="Confirmar"
+          loadingLabel="Cancelando..."
+          loading={cancelling}
+          onConfirm={handleCancel}
+          onCancel={() => setConfirmingId(null)}
+        />
       )}
     </div>
   );
