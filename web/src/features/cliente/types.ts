@@ -85,6 +85,8 @@ export interface ClientAppointment {
   description: string;
   status: AppointmentStatus;
   createdAt: Date | null;
+  /** Última alteração (mudança de status); ausente em documentos antigos. */
+  updatedAt?: Date | null;
 }
 
 export interface ProviderReview {
