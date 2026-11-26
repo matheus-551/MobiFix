@@ -53,3 +53,7 @@ Invoke-RestMethod -Uri 'http://localhost:8080/api/v1/tipos-veiculo' -Headers @{ 
 ```
 
 Nao e necessario mudar o banco, habilitar migrations ou modificar regras do dominio para utilizar as representacoes.
+
+## Ações de agendamentos
+
+Os links `confirmar`, `cancelar` e `concluir` usam **PATCH sem corpo**. O link `remarcar` usa **PATCH com corpo** `{ "horarioId": "UUID do novo horário" }` e só aparece para o cliente responsável em um pendente futuro. São retornados conforme a conta envolvida, o estado e o horário do agendamento. Consulte o [guia de agendamentos](agendamentos.md) para as permissões, prazos e campos de auditoria.
