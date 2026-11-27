@@ -9,16 +9,15 @@ import { formatTime, isFuture, monthLabel, pad, todayIso, toIsoDate } from "../.
 import { ErrorState, LoadingBlock } from "../StateViews";
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
-const DESCRIPTION_LIMIT = 500;
 
 interface DateTimeStepProps {
   providerId: string;
   date: string | null;
   slotId: string | null;
-  description: string;
   onDateChange: (date: string) => void;
   onSlotChange: (slotId: string) => void;
-  onDescriptionChange: (value: string) => void;
+  /** Mostra o campo (desabilitado) de descrição do problema; some na remarcação. */
+  showDescription?: boolean;
   dateError?: string;
   slotError?: string;
 }
@@ -28,10 +27,9 @@ export function DateTimeStep({
   providerId,
   date,
   slotId,
-  description,
   onDateChange,
   onSlotChange,
-  onDescriptionChange,
+  showDescription = true,
   dateError,
   slotError,
 }: DateTimeStepProps) {
@@ -187,6 +185,7 @@ export function DateTimeStep({
           </p>
         )}
 
+        {showDescription && (
         <div className="mt-5">
           <label htmlFor="descricao-problema" className="mb-1.5 block text-xs font-semibold text-gray-700">
             Descrição do problema (opcional)
@@ -194,16 +193,18 @@ export function DateTimeStep({
           <textarea
             id="descricao-problema"
             rows={4}
-            maxLength={DESCRIPTION_LIMIT}
-            value={description}
-            onChange={(event) => onDescriptionChange(event.target.value)}
+            disabled
+            value=""
+            readOnly
+            aria-describedby="descricao-aviso"
             placeholder="Ex.: Gostaria de verificar barulho metálico nas rodas dianteiras ao passar por lombadas..."
-            className="w-full rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200"
+            className="w-full rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800 placeholder:text-gray-400 disabled:cursor-not-allowed disabled:bg-gray-50 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200"
           />
-          <p className="mt-1 text-right text-[11px] text-gray-400">
-            {description.length}/{DESCRIPTION_LIMIT}
+          <p id="descricao-aviso" className="mt-1 text-[11px] text-gray-400">
+            A API de agendamentos ainda não possui campo de descrição: combine os detalhes diretamente com a oficina.
           </p>
         </div>
+        )}
       </section>
     </div>
   );

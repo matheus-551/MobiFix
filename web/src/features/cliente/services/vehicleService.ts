@@ -23,18 +23,24 @@ export async function listMyVehicles(profile: ClientProfile | null, email: strin
   return apiRequest<ApiVehicle[]>("/veiculos/me");
 }
 
+function vehicleBody(input: NewVehicleInput) {
+  return {
+    tipoVeiculoId: input.tipoVeiculoId,
+    marca: input.marca.trim(),
+    modelo: input.modelo.trim(),
+    ano: input.ano,
+    placa: input.placa?.trim() ? input.placa.trim().toUpperCase() : undefined,
+  };
+}
+
 /** `POST /api/v1/veiculos` */
 export function createVehicle(input: NewVehicleInput): Promise<ApiVehicle> {
-  return apiRequest<ApiVehicle>("/veiculos", {
-    method: "POST",
-    body: {
-      tipoVeiculoId: input.tipoVeiculoId,
-      marca: input.marca.trim(),
-      modelo: input.modelo.trim(),
-      ano: input.ano,
-      placa: input.placa?.trim() ? input.placa.trim().toUpperCase() : undefined,
-    },
-  });
+  return apiRequest<ApiVehicle>("/veiculos", { method: "POST", body: vehicleBody(input) });
+}
+
+/** `PUT /api/v1/veiculos/{id}` — substitui os dados do veículo (mesmo corpo do cadastro). */
+export function updateVehicle(id: string, input: NewVehicleInput): Promise<ApiVehicle> {
+  return apiRequest<ApiVehicle>(`/veiculos/${encodeURIComponent(id)}`, { method: "PUT", body: vehicleBody(input) });
 }
 
 /** `DELETE /api/v1/veiculos/{id}` (desativa o veículo). */

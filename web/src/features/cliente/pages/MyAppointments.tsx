@@ -11,6 +11,7 @@ import { getFriendlyError } from "@/shared/lib/api/http";
 import { ConfirmDialog } from "../components/feedback/Dialogs";
 import { useToast } from "../components/feedback/ToastContext";
 import { Modal } from "../components/Modal";
+import { RescheduleModal } from "../components/RescheduleModal";
 import { EmptyState, ErrorState, LINK_BUTTON, LoadingBlock } from "../components/StateViews";
 import { STATUS_LABEL, StatusBadge } from "../components/StatusBadge";
 import { useClient } from "../context/ClientContext";
@@ -29,23 +30,27 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "cancelled", label: "Cancelados" },
 ];
 
-/** Regra aplicada pelo web (a API ainda não tem agendamentos): só cancela pendente/confirmado que ainda não ocorreu. */
+/** Mesma regra da API (`PATCH /agendamentos/{id}/cancelar`): só cancela pendente/confirmado antes do início; a API valida de novo. */
 const canCancel = (item: ClientAppointment) =>
   (item.status === "requested" || item.status === "confirmed") && isFuture(item.date, item.time);
+
+/** Mesma regra da API (`PATCH /agendamentos/{id}/remarcar`): só pendente e antes do início. */
+const canReschedule = (item: ClientAppointment) => item.status === "requested" && isFuture(item.date, item.time);
 
 const reviewHref = (id: string) => `${routes.clientReview}?id=${encodeURIComponent(id)}`;
 
 export default function MyAppointments() {
-  const { uid } = useClient();
+  const { uid, email, profile } = useClient();
   const { showToast } = useToast();
   const params = useSearchParams();
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(params.get("id"));
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
-  const appointments = useAsync(() => listClientAppointments(uid), `appointments:${uid}`, uid !== "");
+  const appointments = useAsync(() => listClientAppointments(profile, email), `appointments:${uid}:${profile ? "p" : "n"}`, uid !== "" && profile !== null);
   const reviewed = useAsync(() => listReviewedAppointmentIds(uid), `reviewed:${uid}`, uid !== "");
 
   const list = appointments.data ?? [];
@@ -54,6 +59,7 @@ export default function MyAppointments() {
   const visible = filter === "all" ? list : list.filter((item) => item.status === filter);
   const details = list.find((item) => item.id === openId) ?? null;
   const toCancel = list.find((item) => item.id === confirmingId) ?? null;
+  const toReschedule = list.find((item) => item.id === rescheduleId) ?? null;
 
   async function handleCancel() {
     if (!toCancel || cancelling) return;
@@ -88,6 +94,11 @@ export default function MyAppointments() {
         <button type="button" onClick={() => setOpenId(item.id)} className={`${link} text-orange-500`}>
           Ver detalhes
         </button>
+        {canReschedule(item) && (
+          <button type="button" onClick={() => setRescheduleId(item.id)} className={`${link} text-gray-700`}>
+            Remarcar
+          </button>
+        )}
         {canCancel(item) && (
           <button type="button" onClick={() => setConfirmingId(item.id)} className={`${link} text-red-500`}>
             Cancelar
@@ -226,6 +237,13 @@ export default function MyAppointments() {
             )}
           </dl>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            {canReschedule(details) && (
+              <div className="sm:w-40">
+                <Button variant="secondary" onClick={() => setRescheduleId(details.id)}>
+                  Remarcar
+                </Button>
+              </div>
+            )}
             {canCancel(details) && (
               <div className="sm:w-40">
                 <Button variant="secondary" onClick={() => setConfirmingId(details.id)}>
@@ -240,6 +258,20 @@ export default function MyAppointments() {
             )}
           </div>
         </Modal>
+      )}
+
+      {toReschedule && (
+        <RescheduleModal
+          appointment={toReschedule}
+          onClose={() => setRescheduleId(null)}
+          onDone={() => {
+            setFeedback(null);
+            showToast(`Agendamento com ${toReschedule.providerName} remarcado.`);
+            setRescheduleId(null);
+            setOpenId(null);
+            appointments.reload();
+          }}
+        />
       )}
 
       {toCancel && (

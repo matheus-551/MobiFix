@@ -6,7 +6,7 @@ import { Alert } from "@/shared/components/Alert";
 import { Button } from "@/shared/components/Button";
 import { SelectField, TextField } from "@/shared/components/FormControls";
 import { getFriendlyError } from "@/shared/lib/api/http";
-import { createVehicle } from "../../services/vehicleService";
+import { createVehicle, updateVehicle } from "../../services/vehicleService";
 import type { ApiVehicle, CatalogItem } from "../../types";
 import { VehicleTypeIcon } from "../../utils/vehicleIcons";
 import { ErrorState, LoadingBlock } from "../StateViews";
@@ -18,17 +18,28 @@ interface VehicleListState {
   reload: () => void;
 }
 
-/** Formulário de cadastro de veículo (`POST /veiculos`), reutilizado pela página "Meus Veículos". */
+/**
+ * Formulário de veículo reutilizado pela página "Meus Veículos": cadastro (`POST /veiculos`) ou, quando recebe
+ * `vehicle`, edição (`PUT /veiculos/{id}`).
+ */
 export function NewVehicleForm({
   vehicleTypes,
+  vehicle,
   onCreated,
   onCancel,
 }: {
   vehicleTypes: CatalogItem[];
+  vehicle?: ApiVehicle;
   onCreated: (vehicle: ApiVehicle) => void;
   onCancel: () => void;
 }) {
-  const [values, setValues] = useState({ tipoVeiculoId: "", marca: "", modelo: "", ano: "", placa: "" });
+  const [values, setValues] = useState({
+    tipoVeiculoId: vehicle ? String(vehicle.tipoVeiculoId) : "",
+    marca: vehicle?.marca ?? "",
+    modelo: vehicle?.modelo ?? "",
+    ano: vehicle ? String(vehicle.ano) : "",
+    placa: vehicle?.placa ?? "",
+  });
   const [errors, setErrors] = useState<Partial<Record<keyof typeof values, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -56,14 +67,14 @@ export function NewVehicleForm({
 
     setSaving(true);
     try {
-      const vehicle = await createVehicle({
+      const input = {
         tipoVeiculoId: Number(values.tipoVeiculoId),
         marca: values.marca,
         modelo: values.modelo,
         ano: year,
         placa: values.placa,
-      });
-      onCreated(vehicle);
+      };
+      onCreated(vehicle ? await updateVehicle(vehicle.id, input) : await createVehicle(input));
     } catch (error) {
       setFormError(getFriendlyError(error));
     } finally {
@@ -73,7 +84,7 @@ export function NewVehicleForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-3 rounded-lg border border-orange-200 bg-orange-50/40 p-4">
-      <h3 className="text-sm font-bold text-gray-900">Cadastrar novo veículo</h3>
+      <h3 className="text-sm font-bold text-gray-900">{vehicle ? "Editar veículo" : "Cadastrar novo veículo"}</h3>
       {formError && <Alert tone="error">{formError}</Alert>}
       <SelectField
         label="Tipo de veículo"
@@ -98,7 +109,7 @@ export function NewVehicleForm({
         </div>
         <div className="sm:w-40">
           <Button type="submit" loading={saving} loadingLabel="Salvando...">
-            Salvar veículo
+            {vehicle ? "Salvar alterações" : "Salvar veículo"}
           </Button>
         </div>
       </div>

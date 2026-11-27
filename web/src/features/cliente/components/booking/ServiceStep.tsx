@@ -3,7 +3,8 @@ import type { CatalogItem } from "../../types";
 
 /**
  * A API não possui serviços com preço/duração: as "especialidades" do prestador são os serviços
- * selecionáveis, e o valor é combinado diretamente com a oficina.
+ * selecionáveis, e o valor é combinado diretamente com a oficina. Cada agendamento da API recebe uma única
+ * especialidade, então a escolha é única (selecionar outro serviço substitui o anterior).
  */
 export function ServiceStep({
   services,
@@ -19,7 +20,7 @@ export function ServiceStep({
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm" aria-labelledby="etapa-servico">
       <h2 id="etapa-servico" className="mb-4 text-base font-bold text-gray-900">
-        2. Selecione os Serviços
+        2. Selecione o Serviço
       </h2>
       {services.length === 0 ? (
         <p className="text-sm text-gray-500">Este prestador ainda não cadastrou serviços.</p>
@@ -34,7 +35,7 @@ export function ServiceStep({
                     checked ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:bg-gray-50"
                   }`}
                 >
-                  <input type="checkbox" className="sr-only" checked={checked} onChange={() => onToggle(service.id)} />
+                  <input type="radio" name="servico" className="sr-only" checked={checked} onChange={() => onToggle(service.id)} />
                   <span
                     aria-hidden
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${

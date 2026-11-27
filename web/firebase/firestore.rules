@@ -317,21 +317,16 @@ service cloud.firestore {
 
         && request.resource.data.appointmentId == appointmentId
 
-        && exists(
-          /databases/$(database)/documents/appointments/$(appointmentId)
-        )
-
-        && get(
-          /databases/$(database)/documents/appointments/$(appointmentId)
-        ).data.clientId == request.auth.uid
-
-        && get(
-          /databases/$(database)/documents/appointments/$(appointmentId)
-        ).data.status == 'completed'
-
-        && request.resource.data.providerId == get(
-          /databases/$(database)/documents/appointments/$(appointmentId)
-        ).data.providerId
+        // Os agendamentos agora ficam na API (PostgreSQL), não mais na coleção
+        // `appointments` do Firestore. Por isso a regra não consegue mais conferir
+        // se o atendimento existe, é do cliente e está concluído: essa conferência
+        // é feita pelo front (que só oferece "Avaliar" para agendamentos CONCLUIDO
+        // do próprio cliente, lidos da API). O ID do documento é o ID do
+        // agendamento, o que mantém no máximo uma avaliação por atendimento.
+        // Para voltar a validar no servidor, a API precisa ter o recurso de
+        // avaliações (ver documento de limitações).
+        && request.resource.data.providerId is string
+        && request.resource.data.providerId.size() > 0
 
         && request.resource.data.keys().hasOnly([
           'appointmentId',

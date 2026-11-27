@@ -63,7 +63,7 @@ function UpcomingCard({ appointment }: { appointment: ClientAppointment }) {
 export default function ClientHome() {
   const { uid, email, profile } = useClient();
 
-  const appointments = useAsync(() => listClientAppointments(uid), `appointments:${uid}`, uid !== "");
+  const appointments = useAsync(() => listClientAppointments(profile, email), `appointments:${uid}:${profile ? "p" : "n"}`, uid !== "" && profile !== null);
   // O card de veículos depende da API; se ela estiver indisponível, os demais cards continuam funcionando.
   const vehicles = useAsync(() => listMyVehicles(profile, email), `vehicles:${uid}:${profile ? "p" : "n"}`, profile !== null);
   const uf = profile?.state ?? "";

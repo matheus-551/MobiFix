@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ClientProfile as ClientProfileData } from "@/shared/types/domain";
+import { DeactivateAccountCard } from "@/features/auth/components/DeactivateAccountCard";
 import { PasswordForm } from "../components/profile/PasswordForm";
 import { ProfileInfoForm } from "../components/profile/ProfileInfoForm";
 import { LoadingSkeleton } from "../components/StateViews";
@@ -22,6 +23,7 @@ export default function ClientProfile() {
 
       {initial ? <ProfileInfoForm initial={initial} /> : <LoadingSkeleton label="Carregando seu perfil..." />}
       <PasswordForm />
+      <DeactivateAccountCard />
     </div>
   );
 }

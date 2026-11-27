@@ -8,6 +8,7 @@ import { BRAZILIAN_STATES } from "@/shared/constants/catalog";
 import { getFriendlyError } from "@/shared/lib/api/http";
 import { useAsync } from "@/shared/hooks/useAsync";
 import { onlyDigits } from "@/shared/utils/format";
+import { DeactivateAccountCard } from "@/features/auth/components/DeactivateAccountCard";
 import { ErrorState, LoadingBlock } from "@/features/cliente/components/StateViews";
 import { listSpecialties, listVehicleTypes } from "@/features/cliente/services/catalogService";
 import type { CatalogItem } from "@/features/cliente/types";
@@ -270,6 +271,7 @@ export default function ProviderProfileEditor() {
           <Button type="submit" loading={saving} loadingLabel="Salvando...">Salvar Perfil</Button>
         </div>
       </form>
+      <DeactivateAccountCard />
     </>
   );
 }

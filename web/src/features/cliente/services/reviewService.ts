@@ -9,13 +9,17 @@ import {
   where,
   type Timestamp,
 } from "firebase/firestore";
+import { ApiError } from "@/shared/lib/api/ApiError";
 import { getDb } from "@/shared/lib/firebase/client";
+import { getErrorCode } from "@/shared/utils/firebaseErrors";
 import { toDate } from "@/shared/utils/firestore";
 import type { ClientAppointment, ProviderReview, RatingSummary } from "../types";
 
 /**
  * Avaliações ficam no Firestore (`reviews/{appointmentId}`): a API ainda não possui o recurso.
- * O ID é o do agendamento, o que garante no máximo uma avaliação por atendimento.
+ * O ID é o do agendamento (UUID da API), o que garante no máximo uma avaliação por atendimento.
+ * Limitação: as regras do Firestore (`firebase/firestore.rules`) só aceitam avaliar atendimentos gravados na coleção
+ * `appointments` do Firestore; os agendamentos agora ficam na API, então a gravação pode ser recusada (ver `submitReview`).
  */
 
 interface ReviewData {
@@ -93,13 +97,23 @@ export interface NewReviewInput {
 }
 
 export async function submitReview({ appointment, clientName, rating, comment }: NewReviewInput): Promise<void> {
-  await setDoc(doc(getDb(), "reviews", appointment.id), {
-    appointmentId: appointment.id,
-    providerId: appointment.providerId,
-    clientId: appointment.clientId,
-    clientName,
-    rating,
-    comment: comment.trim(),
-    createdAt: serverTimestamp(),
-  });
+  try {
+    await setDoc(doc(getDb(), "reviews", appointment.id), {
+      appointmentId: appointment.id,
+      providerId: appointment.providerId,
+      clientId: appointment.clientId,
+      clientName,
+      rating,
+      comment: comment.trim(),
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    if (getErrorCode(error) === "permission-denied") {
+      throw new ApiError(
+        403,
+        "Não foi possível registrar a avaliação: a API ainda não possui avaliações e as regras atuais do Firestore só aceitam avaliar atendimentos gravados nele.",
+      );
+    }
+    throw error;
+  }
 }

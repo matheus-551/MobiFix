@@ -16,7 +16,7 @@ import { ServiceStep } from "../components/booking/ServiceStep";
 import { VehicleStep } from "../components/booking/VehicleStep";
 import { EmptyState, ErrorState, LINK_BUTTON, LINK_BUTTON_SECONDARY, LoadingBlock } from "../components/StateViews";
 import { useClient } from "../context/ClientContext";
-import { createAppointment, DuplicateAppointmentError } from "../services/appointmentService";
+import { createAppointment } from "../services/appointmentService";
 import { listVehicleTypes } from "../services/catalogService";
 import { getProvider, listAvailableSlots } from "../services/providerService";
 import { listMyVehicles } from "../services/vehicleService";
@@ -37,10 +37,12 @@ function Wizard({ provider }: { provider: PublicProvider }) {
   const params = useSearchParams();
   const { uid, email, profile } = useClient();
 
+  // A API recebe uma única especialidade por agendamento: de uma lista pré-selecionada vale só a primeira.
   const preselected = (params.get("esp") ?? "")
     .split(",")
     .map(Number)
-    .filter((id) => provider.especialidades.some((item) => item.id === id));
+    .filter((id) => provider.especialidades.some((item) => item.id === id))
+    .slice(0, 1);
 
   // O estado fica neste componente, então é preservado ao navegar entre as etapas.
   const [stage, setStage] = useState<Stage>("veiculo-servico");
@@ -49,7 +51,6 @@ function Wizard({ provider }: { provider: PublicProvider }) {
   const [date, setDate] = useState<string | null>(null);
   const [slotId, setSlotId] = useState<string | null>(null);
   const [slotTime, setSlotTime] = useState<string | null>(null);
-  const [description, setDescription] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -65,7 +66,7 @@ function Wizard({ provider }: { provider: PublicProvider }) {
   const currentStep = stage === "confirmacao" ? 5 : stage === "data-horario" ? (date ? 4 : 3) : vehicleId ? 2 : 1;
 
   function toggleService(id: number) {
-    setServiceIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    setServiceIds((current) => (current.includes(id) ? [] : [id]));
     setErrors((current) => ({ ...current, services: undefined }));
   }
 
@@ -102,7 +103,7 @@ function Wizard({ provider }: { provider: PublicProvider }) {
   }
 
   async function confirm() {
-    if (submitLock.current || !vehicle || !date || !slotId || !slotTime) return;
+    if (submitLock.current || !vehicle || !date || !slotId || !slotTime || services.length === 0) return;
     submitLock.current = true; // bloqueia cliques repetidos antes mesmo do re-render
     setSubmitting(true);
     setSubmitError(null);
@@ -114,22 +115,10 @@ function Wizard({ provider }: { provider: PublicProvider }) {
         setStage("data-horario");
         return;
       }
-      await createAppointment({
-        clientId: uid,
-        providerId: provider.id,
-        providerName: provider.nome,
-        vehicleId: vehicle.id,
-        vehicleLabel: vehicleLabel(vehicle),
-        specialtyIds: services.map((item) => item.id),
-        specialtyNames: services.map((item) => item.nome),
-        slotId,
-        date,
-        time: slotTime,
-        description,
-      });
+      await createAppointment({ vehicleId: vehicle.id, slotId, specialtyId: services[0].id });
       setDone(true);
     } catch (error) {
-      if (error instanceof ApiError || error instanceof DuplicateAppointmentError) setSubmitError(error.message);
+      if (error instanceof ApiError) setSubmitError(error.message);
       else setSubmitError(getFriendlyError(error));
     } finally {
       submitLock.current = false;
@@ -196,7 +185,6 @@ function Wizard({ provider }: { provider: PublicProvider }) {
             providerId={provider.id}
             date={date}
             slotId={slotId}
-            description={description}
             onDateChange={(value) => {
               setDate(value);
               setSlotId(null);
@@ -206,7 +194,6 @@ function Wizard({ provider }: { provider: PublicProvider }) {
               setSlotId(value);
               setErrors((current) => ({ ...current, slot: undefined }));
             }}
-            onDescriptionChange={setDescription}
             dateError={errors.date}
             slotError={errors.slot}
           />
@@ -234,7 +221,7 @@ function Wizard({ provider }: { provider: PublicProvider }) {
               services: services.map((item) => item.nome),
               dateLabel: formatDateBr(date),
               time: slotTime,
-              description,
+              description: "",
             }}
           />
           {submitError && <Alert tone="error">{submitError}</Alert>}

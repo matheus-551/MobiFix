@@ -67,7 +67,37 @@ export interface ApiUser {
   ativo: boolean;
 }
 
-/** Agendamento do cliente (coleção `appointments` do Firestore, ver README). */
+/** Status devolvido pela API em `/agendamentos`. */
+export type ApiAppointmentStatus = "PENDENTE" | "CONFIRMADO" | "CANCELADO" | "CONCLUIDO";
+
+/** Resposta de `/agendamentos` (DTO `AgendamentoResponse`). */
+export interface ApiAppointment {
+  id: string;
+  clienteId: string;
+  prestadorId: string;
+  veiculoId: string;
+  horarioId: string;
+  especialidadeId: number;
+  data: string; // yyyy-MM-dd
+  horaInicio: string; // HH:mm[:ss]
+  status: ApiAppointmentStatus;
+  criadoEm: string; // instante UTC (ISO-8601)
+  confirmadoEm: string | null;
+  canceladoEm: string | null;
+  concluidoEm: string | null;
+  remarcadoEm: string | null;
+}
+
+/** Resposta de `GET /agendamentos/me`. */
+export interface ApiAppointmentPage {
+  content: ApiAppointment[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+/** Agendamento do cliente (API `/agendamentos`, com nomes obtidos dos demais recursos da API). */
 export type AppointmentStatus = "requested" | "confirmed" | "completed" | "cancelled";
 
 export interface ClientAppointment {
@@ -82,6 +112,7 @@ export interface ClientAppointment {
   slotId: string;
   date: string; // yyyy-MM-dd
   time: string; // HH:mm
+  /** A API não possui descrição do problema: fica sempre vazia. */
   description: string;
   status: AppointmentStatus;
   createdAt: Date | null;

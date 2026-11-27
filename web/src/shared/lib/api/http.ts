@@ -27,7 +27,7 @@ export { ApiError };
 type Query = Record<string, string | number | undefined | null>;
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   query?: Query;
   body?: unknown;
   signal?: AbortSignal;

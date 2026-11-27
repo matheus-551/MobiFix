@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Alert } from "@/shared/components/Alert";
 import { Button } from "@/shared/components/Button";
 import { useAsync } from "@/shared/hooks/useAsync";
@@ -18,6 +18,7 @@ import { VehicleTypeIcon } from "../utils/vehicleIcons";
 export default function MyVehicles() {
   const { email, profile } = useClient();
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<ApiVehicle | null>(null);
   const [toRemove, setToRemove] = useState<ApiVehicle | null>(null);
   const [removing, setRemoving] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
@@ -48,7 +49,7 @@ export default function MyVehicles() {
           <h1 className="text-2xl font-bold text-gray-900">Meus Veículos</h1>
           <p className="mt-1 text-sm text-gray-500">Veículos cadastrados para usar nos agendamentos.</p>
         </div>
-        {!adding && (
+        {!adding && !editing && (
           <div className="w-full sm:w-52">
             <Button onClick={() => setAdding(true)}>Cadastrar Novo Veículo</Button>
           </div>
@@ -64,6 +65,20 @@ export default function MyVehicles() {
           onCreated={(vehicle) => {
             setAdding(false);
             setFeedback({ tone: "success", message: `${vehicle.marca} ${vehicle.modelo} cadastrado.` });
+            vehicles.reload();
+          }}
+        />
+      )}
+
+      {editing && (
+        <NewVehicleForm
+          key={editing.id}
+          vehicle={editing}
+          vehicleTypes={types.data ?? []}
+          onCancel={() => setEditing(null)}
+          onCreated={(vehicle) => {
+            setEditing(null);
+            setFeedback({ tone: "success", message: `${vehicle.marca} ${vehicle.modelo} atualizado.` });
             vehicles.reload();
           }}
         />
@@ -90,6 +105,18 @@ export default function MyVehicles() {
                   {vehicle.ano} • {typeName(vehicle.tipoVeiculoId)} • {vehicle.placa || "sem placa"}
                 </p>
               </div>
+              <button
+                type="button"
+                aria-label={`Editar ${vehicle.marca} ${vehicle.modelo}`}
+                onClick={() => {
+                  setAdding(false);
+                  setFeedback(null);
+                  setEditing(vehicle);
+                }}
+                className="rounded p-2 text-gray-400 hover:bg-orange-50 hover:text-orange-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+              >
+                <Pencil aria-hidden className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 aria-label={`Remover ${vehicle.marca} ${vehicle.modelo}`}

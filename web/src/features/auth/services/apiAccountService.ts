@@ -18,3 +18,8 @@ export function ensureApiUserFor(tipo: ApiUserType, create: ApiUserCreateData | 
 export function syncApiUserAfterSignup(tipo: ApiUserType, create: ApiUserCreateData): void {
   void ensureApiUserFor(tipo, create).catch(() => undefined);
 }
+
+/** `DELETE /api/v1/usuarios/me` — desativa a conta na API (sem exclusão física; a API não tem rota para reativar). */
+export function deactivateApiAccount(): Promise<void> {
+  return apiRequest<void>("/usuarios/me", { method: "DELETE" });
+}

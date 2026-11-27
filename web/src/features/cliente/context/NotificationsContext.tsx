@@ -50,7 +50,7 @@ function saveReadIds(uid: string, ids: ReadonlySet<string>) {
 }
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { uid } = useClient();
+  const { uid, email, profile } = useClient();
   const pathname = usePathname();
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(() =>
     typeof window === "undefined" || !uid ? new Set() : loadReadIds(uid),
@@ -60,11 +60,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   // A chave inclui a rota: navegar (ex.: depois de agendar ou cancelar) busca os avisos de novo.
   const { data, error, loading, reload } = useAsync(
     async () => {
-      const [appointments, reviewed] = await Promise.all([listClientAppointments(uid), listReviewedAppointmentIds(uid)]);
+      const [appointments, reviewed] = await Promise.all([listClientAppointments(profile, email), listReviewedAppointmentIds(uid)]);
       return buildNotifications(appointments, new Set(reviewed));
     },
-    `notifications:${uid}:${pathname}`,
-    uid !== "",
+    `notifications:${uid}:${profile ? "p" : "n"}:${pathname}`,
+    uid !== "" && profile !== null,
   );
 
   // Guarda a última carga boa para o selo do sino não sumir enquanto a próxima carga acontece.

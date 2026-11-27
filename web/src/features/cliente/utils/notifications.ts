@@ -4,7 +4,7 @@ import { formatDateBr, formatTime } from "./dates";
 
 /**
  * A API ainda não possui o recurso "notificações". Os avisos exibidos são DERIVADOS dos agendamentos e das
- * avaliações reais do cliente (Firestore): cada mudança de situação de um agendamento gera um aviso.
+ * avaliações reais do cliente (agendamentos da API e avaliações do Firestore): cada mudança de situação de um agendamento gera um aviso.
  * Não há dados simulados; promoções/avisos do sistema só existirão quando houver uma fonte para eles.
  */
 
